@@ -13,11 +13,37 @@ import (
 	"github.com/Bharath-code/git-scope/internal/model"
 )
 
+// smartIgnorePatterns are always-ignored directories for performance
+// These are system/tool directories that should never contain user repos
+var smartIgnorePatterns = []string{
+	// macOS/Linux system directories
+	"Library", ".Trash", ".cache", ".local",
+	// Package managers & runtimes
+	".npm", ".yarn", ".pnpm", ".bun", ".cargo", ".rustup", ".go",
+	".venv", ".pyenv", ".rbenv", ".nvm", ".sdkman",
+	// IDE extensions (contain third-party repos, not your code)
+	".vscode", ".vscode-server", ".cursor", ".zed", ".idea", ".atom",
+	// Shell & tools configs
+	".oh-my-zsh", ".tmux", ".vim", ".emacs.d", ".gemini",
+	// Docker/Cloud
+	".docker", ".kube", ".ssh", ".gnupg",
+	// Cloud sync (slow and likely duplicates)
+	"Google Drive", "OneDrive", "Dropbox", "iCloud",
+}
+
 // ScanRoots recursively scans the given root directories for git repositories
 // It skips directories matching the ignore patterns
 func ScanRoots(roots, ignore []string) ([]model.Repo, error) {
-	ignoreSet := make(map[string]struct{}, len(ignore))
+	// Build ignore set from user config + smart defaults
+	ignoreSet := make(map[string]struct{}, len(ignore)+len(smartIgnorePatterns))
+	
+	// Add user-defined ignores
 	for _, pattern := range ignore {
+		ignoreSet[pattern] = struct{}{}
+	}
+	
+	// Add smart defaults (always apply for performance)
+	for _, pattern := range smartIgnorePatterns {
 		ignoreSet[pattern] = struct{}{}
 	}
 

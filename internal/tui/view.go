@@ -33,7 +33,9 @@ func (m Model) renderLoading() string {
 
 	b.WriteString(compactLogo())
 	b.WriteString("  ")
-	b.WriteString(loadingStyle.Render("⏳ Scanning repositories..."))
+	b.WriteString(m.spinner.View())
+	b.WriteString(" ")
+	b.WriteString(loadingStyle.Render("Scanning repositories..."))
 	b.WriteString("\n\n")
 
 	b.WriteString(subtitleStyle.Render("Searching for git repos in:"))
@@ -56,7 +58,7 @@ func (m Model) renderError() string {
 	b.WriteString(compactLogo())
 	b.WriteString("  ")
 	b.WriteString(errorTitleStyle.Render("✗ Error"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	errContent := ""
 	if m.err != nil {
@@ -67,9 +69,22 @@ func (m Model) renderError() string {
 	b.WriteString(errorBoxStyle.Render(errContent))
 	b.WriteString("\n\n")
 
-	b.WriteString(helpItem("q", "quit"))
-	b.WriteString("  •  ")
+	// Actionable suggestions
+	b.WriteString(subtitleStyle.Render("💡 Suggestions:"))
+	b.WriteString("\n")
+	b.WriteString(pathBulletStyle.Render("  → "))
+	b.WriteString(pathStyle.Render("Check your config at ~/.config/git-scope/config.yml"))
+	b.WriteString("\n")
+	b.WriteString(pathBulletStyle.Render("  → "))
+	b.WriteString(pathStyle.Render("Run 'git-scope init' to reconfigure"))
+	b.WriteString("\n")
+	b.WriteString(pathBulletStyle.Render("  → "))
+	b.WriteString(pathStyle.Render("Make sure git is installed and in PATH"))
+	b.WriteString("\n\n")
+
 	b.WriteString(helpItem("r", "retry"))
+	b.WriteString("  •  ")
+	b.WriteString(helpItem("q", "quit"))
 
 	return b.String()
 }

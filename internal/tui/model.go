@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -48,6 +49,7 @@ type Model struct {
 	cfg         *config.Config
 	table       table.Model
 	textInput   textinput.Model
+	spinner     spinner.Model
 	repos       []model.Repo
 	filteredRepos []model.Repo  // After filter applied
 	sortedRepos []model.Repo   // After sort applied
@@ -113,10 +115,16 @@ func NewModel(cfg *config.Config) Model {
 	ti.CharLimit = 50
 	ti.Width = 30
 
+	// Create spinner with Braille pattern
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
+
 	return Model{
 		cfg:        cfg,
 		table:      t,
 		textInput:  ti,
+		spinner:    sp,
 		state:      StateLoading,
 		sortMode:   SortByDirty,
 		filterMode: FilterAll,
@@ -125,7 +133,7 @@ func NewModel(cfg *config.Config) Model {
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-	return scanReposCmd(m.cfg)
+	return tea.Batch(m.spinner.Tick, scanReposCmd(m.cfg))
 }
 
 // GetSelectedRepo returns the currently selected repo

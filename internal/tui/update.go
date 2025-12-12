@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Bharath-code/git-scope/internal/model"
@@ -20,6 +21,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.resizeTable()
+
+	case spinner.TickMsg:
+		// Update spinner during loading
+		if m.state == StateLoading {
+			m.spinner, cmd = m.spinner.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 
 	case scanCompleteMsg:
 		m.repos = msg.repos
