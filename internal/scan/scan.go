@@ -77,6 +77,13 @@ func ScanRoots(roots, ignore []string) ([]model.Repo, error) {
 				// Found a .git directory
 				if d.IsDir() && d.Name() == ".git" {
 					repoPath := filepath.Dir(path)
+					
+					// Resolve to absolute path to get proper repo name
+					// This handles cases where path is "." or relative
+					absPath, err := filepath.Abs(repoPath)
+					if err == nil {
+						repoPath = absPath
+					}
 					repoName := filepath.Base(repoPath)
 
 					status, serr := gitstatus.Status(repoPath)

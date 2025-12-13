@@ -17,13 +17,17 @@ type Config struct {
 }
 
 // defaultConfig returns sensible defaults
+// By default, scan the current directory so git-scope works out of the box
 func defaultConfig() *Config {
-	home, _ := os.UserHomeDir()
+	// Get current working directory as default root
+	cwd, err := os.Getwd()
+	if err != nil {
+		// Fallback to home directory if cwd fails
+		cwd, _ = os.UserHomeDir()
+	}
+	
 	return &Config{
-		Roots: []string{
-			filepath.Join(home, "code"),
-			filepath.Join(home, "projects"),
-		},
+		Roots: []string{cwd},
 		Ignore: []string{
 			"node_modules",
 			".next",
@@ -62,15 +66,26 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// expandPath expands ~ to user home directory
+// expandPath expands ~ to user home directory and resolves relative paths
 func expandPath(path string) string {
+	// Handle ~ prefix
 	if strings.HasPrefix(path, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return path
 		}
-		return filepath.Join(home, path[2:])
+		path = filepath.Join(home, path[2:])
 	}
+	
+	// Handle "." or relative paths - convert to absolute
+	if path == "." || !filepath.IsAbs(path) {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return path
+		}
+		path = absPath
+	}
+	
 	return path
 }
 
