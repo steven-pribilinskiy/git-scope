@@ -30,7 +30,7 @@ function trackEvent(eventName, title) {
 // ===============================
 function copyInstallCommand() {
     const command = "brew tap Bharath-code/tap && brew install git-scope";
-    
+
     // Fallback for non-secure contexts
     if (!navigator.clipboard) {
         const ta = document.createElement('textarea');
@@ -54,9 +54,9 @@ function copyInstallCommand() {
 function showCopyFeedback() {
     const icon = document.getElementById('copy-icon');
     if (!icon) return;
-    
+
     const originalHTML = icon.innerHTML;
-    
+
     // Change to Checkmark
     icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
     icon.style.opacity = '1';
@@ -70,7 +70,37 @@ function showCopyFeedback() {
 }
 
 // ===============================
-// SESSION SUMMARY
+// CLICK TRACKING
+// ===============================
+document.getElementById('nav-github-link')?.addEventListener('click', () => {
+    trackEvent('github-star-click', 'Clicked GitHub Stars in Nav');
+});
+
+document.getElementById('hero-install-options')?.addEventListener('click', () => {
+    trackEvent('install-options-click', 'Clicked View Windows/Linux Install');
+});
+
+document.getElementById('hero-cta-star')?.addEventListener('click', () => {
+    trackEvent('hero-cta-star-click', 'Clicked Hero Star CTA');
+});
+
+document.getElementById('hero-cta-features')?.addEventListener('click', () => {
+    trackEvent('hero-cta-features-click', 'Clicked Hero Features CTA');
+});
+
+document.getElementById('features-view-all')?.addEventListener('click', () => {
+    trackEvent('features-view-all-click', 'Clicked View All Features');
+});
+
+document.querySelectorAll('footer a').forEach(link => {
+    link.addEventListener('click', () => {
+        const linkName = link.textContent.trim();
+        trackEvent('footer-click-' + linkName.toLowerCase().replace(/\s+/g, '-'), 'Clicked ' + linkName + ' in footer');
+    });
+});
+
+// ===============================
+// SCROLL DEPTH TRACKING
 // ===============================
 let maxScroll = 0;
 let scrollMilestones = { 25: false, 50: false, 75: false, 100: false };
@@ -87,6 +117,9 @@ window.addEventListener('scroll', () => {
     }
 });
 
+// ===============================
+// SESSION SUMMARY
+// ===============================
 window.addEventListener('beforeunload', () => {
     analytics.track('session_end', {
         maxScroll: maxScroll,

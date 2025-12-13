@@ -600,6 +600,26 @@
             background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
         }
 
+        /* Secondary Button */
+        .secondary-btn {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            padding: 0.8rem 1.5rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border);
+        }
+
+        .secondary-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text-main);
+            border-color: var(--text-muted);
+        }
+
         /* Zig-Zag Features */
         .feature-section {
             padding: 4rem 0;
@@ -727,7 +747,8 @@
                 <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
                 <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=Downloads"
                     alt="Downloads" height="20">
-                <a href="https://github.com/Bharath-code/git-scope" target="_blank" style="text-decoration: none;">
+                <a href="https://github.com/Bharath-code/git-scope" target="_blank" style="text-decoration: none;"
+                    id="nav-github-link">
                     <img src="https://img.shields.io/github/stars/Bharath-code/git-scope?style=social"
                         alt="GitHub Stars" height="20">
                 </a>
@@ -742,6 +763,24 @@
                     can stay in your
                     flow state without endlessly <code>cd</code>-ing through nested directories.
                 </p>
+
+                <!-- Hero CTAs -->
+                <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 3rem; flex-wrap: wrap;">
+                    <a href="https://github.com/Bharath-code/git-scope" target="_blank" class="hero-cta-btn"
+                        id="hero-cta-star">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            style="margin-right: 0.5rem;">
+                            <polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                            </polygon>
+                        </svg>
+                        Star on GitHub
+                    </a>
+                    <a href="#features" class="secondary-btn" id="hero-cta-features">
+                        How it Works
+                    </a>
+                </div>
 
                 <!-- Simplified Install -->
                 <div class="install-section" style="margin-bottom: 2rem;">
@@ -759,7 +798,8 @@
                     </div>
                     <div style="margin-top: 1rem;">
                         <a href="https://github.com/Bharath-code/git-scope/releases" target="_blank"
-                            style="color: var(--text-muted); font-size: 0.9rem; text-decoration: underline;">View
+                            style="color: var(--text-muted); font-size: 0.9rem; text-decoration: underline;"
+                            id="hero-install-options">View
                             Windows, Linux & Go Install</a>
                     </div>
                 </div>
@@ -789,6 +829,8 @@
                 </div>
 
             </section>
+
+
 
             <section class="value-prop" style="margin-bottom: 6rem; text-align: center;">
                 <p
@@ -859,6 +901,17 @@
                     </div>
                 </div>
 
+            </div>
+
+            <!-- More Features Link -->
+            <div style="text-align: center; margin-top: 4rem; margin-bottom: 6rem;">
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 1.1rem;">
+                    ...plus Disk Usage,Timeline,Sorting, and more.
+                </p>
+                <a href="https://github.com/Bharath-code/git-scope#features" target="_blank" class="secondary-btn"
+                    id="features-view-all">
+                    View full feature list on GitHub &rarr;
+                </a>
             </div>
 
             <!-- Keyboard Cheat Sheet -->
