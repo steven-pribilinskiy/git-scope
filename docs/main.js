@@ -69,6 +69,28 @@ function showCopyFeedback() {
     }, 2000);
 }
 
+function copyScriptCommand() {
+    const command = "curl -sSL https://raw.githubusercontent.com/Bharath-code/git-scope/main/scripts/install.sh | sh";
+
+    if (!navigator.clipboard) {
+        const ta = document.createElement('textarea');
+        ta.value = command;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    } else {
+        navigator.clipboard.writeText(command);
+    }
+
+    const feedback = document.getElementById('script-copy-feedback');
+    if (feedback) {
+        feedback.style.opacity = '1';
+        setTimeout(() => { feedback.style.opacity = '0'; }, 2000);
+    }
+    trackEvent('script-command-copied', 'Copied curl install command');
+}
+
 // ===============================
 // CLICK TRACKING
 // ===============================

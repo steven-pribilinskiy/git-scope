@@ -5,6 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/Bharath-code/git-scope)](https://goreportcard.com/report/github.com/Bharath-code/git-scope)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub stars](https://img.shields.io/github/stars/Bharath-code/git-scope)](https://github.com/Bharath-code/git-scope/stargazers)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/iam_pbk)
 
 ![git-scope Demo](docs/git-scope-demo-1.webp)
 

@@ -102,10 +102,27 @@
             font-family: 'JetBrains Mono', monospace;
         }
 
+        /* Prevent horizontal overflow globally */
+        img,
+        svg,
+        video,
+        canvas,
+        audio,
+        iframe,
+        embed,
+        object {
+            max-width: 100%;
+            height: auto;
+        }
+
         .container {
+            width: 100%;
+            /* Ensure container doesn't exceed viewport */
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 2rem;
+            overflow-x: hidden;
+            /* Clip anything that sticks out of container */
         }
 
         /* Nav */
@@ -179,6 +196,32 @@
             color: var(--text-main);
         }
 
+        .support-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ec4899;
+            /* Pink-500 for love */
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 0.4rem 0.8rem;
+            border: 1px solid rgba(236, 72, 153, 0.2);
+            border-radius: 9999px;
+            background: rgba(236, 72, 153, 0.05);
+            transition: all 0.2s ease;
+        }
+
+        .support-btn:hover {
+            background: rgba(236, 72, 153, 0.15);
+            border-color: rgba(236, 72, 153, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .support-text {
+            display: inline;
+        }
+
         @media (max-width: 768px) {
             nav {
                 /* flex-wrap: wrap; removed to keep items on same line */
@@ -191,6 +234,16 @@
             /* Hide nav links on mobile to prevent layout issues */
             .nav-links {
                 display: none;
+            }
+
+            /* Show only icon on mobile to save space */
+            .support-text {
+                display: none;
+            }
+
+            .support-btn {
+                padding: 0.4rem;
+                /* Smaller padding for icon-only */
             }
 
             .nav-right {
@@ -232,6 +285,23 @@
             margin-bottom: 1.5rem;
         }
 
+        .hero h1 {
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 2.5rem;
+                /* Force smaller size on mobile */
+                word-break: break-word;
+                /* Ensure it wraps */
+            }
+        }
+
         .gradient-text {
             background: var(--gradient);
             -webkit-background-clip: text;
@@ -247,8 +317,72 @@
         }
 
         /* Install Tabs */
+        .install-grid {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            align-items: stretch;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .install-option {
+            flex: 1;
+            /* Allow it to shrink below 280px on tiny screens, but prefer 300px on desktop */
+            flex-basis: 300px;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .install-heading {
+            text-align: center;
+            margin-bottom: 0.75rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .desktop-only {
+            display: inline;
+        }
+
+        .mobile-only {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+                /* Reduce padding on mobile to give more space */
+            }
+
+            .desktop-only {
+                display: none;
+            }
+
+            .mobile-only {
+                display: inline;
+            }
+
+            .install-grid {
+                flex-direction: column;
+                /* Explicitly stack on mobile */
+                gap: 2rem;
+            }
+
+            .install-option {
+                width: 100%;
+                /* Full width on mobile */
+                flex-basis: auto;
+            }
+        }
+
         .install-section {
-            max-width: 600px;
+            max-width: 800px;
+            /* Increased max-width for side-by-side */
             margin: 0 auto;
         }
 
@@ -744,6 +878,17 @@
                     <a href="#blog">Blog</a>
                     <a href="#contact">Contact</a>
                 </div>
+
+                <!-- Sponsor Button -->
+                <a href="https://buymeacoffee.com/iam_pbk" target="_blank" class="support-btn"
+                    aria-label="Sponsor Project">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                    </svg>
+                    <span class="support-text">Sponsor</span>
+                </a>
+
                 <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
                 <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=Downloads"
                     alt="Downloads" height="20">
@@ -784,23 +929,57 @@
 
                 <!-- Simplified Install -->
                 <div class="install-section" style="margin-bottom: 2rem;">
-                    <div class="install-box" onclick="copyInstallCommand()"
-                        style="padding: 1rem; text-align: center; max-width: 500px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 1rem;">
-                        <span class="prompt">$</span>
-                        <span class="cmd" style="font-size: 1.1rem; font-weight: 600;">brew tap Bharath-code/tap && brew
-                            install git-scope</span>
-                        <svg id="copy-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"
-                            style="opacity: 0.5; margin-left: auto; transition: all 0.2s;">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
+
+                    <div class="install-grid">
+                        <!-- Option 1: Homebrew -->
+                        <div class="install-option">
+                            <div class="install-heading">Homebrew</div>
+                            <div class="install-box" onclick="copyInstallCommand()"
+                                style="padding: 1rem; text-align: center; height: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                                <span class="prompt">$</span>
+                                <span class="cmd" style="font-size: 0.95rem; font-weight: 600;">brew tap
+                                    Bharath-code/tap &&
+                                    brew install git-scope</span>
+                                <svg id="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="feather feather-copy"
+                                    style="opacity: 0.5; margin-left: auto; min-width: 16px;">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Option 2: Script -->
+                        <div class="install-option">
+                            <div class="install-heading">Universal Installer</div>
+                            <div class="install-box" onclick="copyScriptCommand()"
+                                style="padding: 1rem; text-align: center; height: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                                <span class="prompt">$</span>
+                                <span class="cmd" style="font-size: 0.95rem; font-weight: 600; word-break: break-all;">
+                                    <span class="desktop-only">curl -sSL
+                                        https://raw.githubusercontent.com/Bharath-code/git-scope/main/scripts/install.sh
+                                        | sh</span>
+                                    <span class="mobile-only">curl -sSL .../scripts/install.sh | sh</span>
+                                </span>
+                                <svg id="script-copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="feather feather-copy"
+                                    style="opacity: 0.5; margin-left: auto; min-width: 16px;">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                <div id="script-copy-feedback"
+                                    style="font-size: 0.75rem; color: #27C93F; opacity: 0; transition: opacity 0.2s; position: absolute; bottom: 4px; right: 10px;">
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
                     <div style="margin-top: 1rem;">
                         <a href="https://github.com/Bharath-code/git-scope/releases" target="_blank"
                             style="color: var(--text-muted); font-size: 0.9rem; text-decoration: underline;"
-                            id="hero-install-options">View
-                            Windows, Linux & Go Install</a>
+                            id="hero-install-options">View Windows & Go Install</a>
                     </div>
                 </div>
 
