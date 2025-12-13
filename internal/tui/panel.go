@@ -27,19 +27,28 @@ var (
 	heatmapLevel3 = lipgloss.NewStyle().Foreground(lipgloss.Color("#26a641")) // Medium-High
 	heatmapLevel4 = lipgloss.NewStyle().Foreground(lipgloss.Color("#39d353")) // High
 
-	// Panel styling
+	// Panel styling - Tuimorphic borders
 	panelBorderStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#30363d")).
+				Padding(0, 1)
+
+	// Active panel border (when focused)
+	panelBorderActiveStyle = lipgloss.NewStyle().
 				BorderStyle(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#7C3AED")).
 				Padding(0, 1)
 
 	panelTitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#A78BFA")).
+			Foreground(lipgloss.Color("#f0f6fc")).
 			MarginBottom(1)
 
+	panelSubtitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#8b949e"))
+
 	panelMutedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280"))
+			Foreground(lipgloss.Color("#6e7681"))
 )
 
 // renderSplitPane renders a split-pane layout with table on left and panel on right
@@ -57,7 +66,8 @@ func renderSplitPane(leftContent, rightContent string, totalWidth int) string {
 		Width(leftWidth).
 		Render(leftContent)
 
-	rightPane := panelBorderStyle.
+	// Use active border style for panel (Tuimorphic)
+	rightPane := panelBorderActiveStyle.
 		Width(rightWidth).
 		Render(rightContent)
 
@@ -72,8 +82,12 @@ func renderGrassPanel(data *stats.ContributionData, width, height int) string {
 
 	var b strings.Builder
 
-	// Title
+	// Title with emoji
 	b.WriteString(panelTitleStyle.Render("🌿 Contribution Graph"))
+	b.WriteString("\n")
+
+	// Subtitle with date range (Tuimorphic style)
+	b.WriteString(panelSubtitleStyle.Render(fmt.Sprintf("Last %d weeks", data.WeeksCount)))
 	b.WriteString("\n\n")
 
 	// Month labels

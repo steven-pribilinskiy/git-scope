@@ -201,22 +201,22 @@ func (m Model) renderStats() string {
 	}
 
 	stats := []string{}
-	
+
 	// Show count with filter info
 	if shown == total {
 		stats = append(stats, statsBadgeStyle.Render(fmt.Sprintf("📁 %d repos", total)))
 	} else {
 		stats = append(stats, statsBadgeStyle.Render(fmt.Sprintf("📁 %d/%d repos", shown, total)))
 	}
-	
+
 	if dirty > 0 {
 		stats = append(stats, dirtyBadgeStyle.Render(fmt.Sprintf("● %d dirty", dirty)))
 	}
 	if clean > 0 {
 		stats = append(stats, cleanBadgeStyle.Render(fmt.Sprintf("✓ %d clean", clean)))
 	}
-	
-	// Filter indicator
+
+	// Filter indicator with inline hint
 	if m.filterMode != FilterAll {
 		filterBadge := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#000000")).
@@ -224,74 +224,73 @@ func (m Model) renderStats() string {
 			Padding(0, 1).
 			Bold(true).
 			Render("⚡ " + m.GetFilterModeName())
-		stats = append(stats, filterBadge)
+		filterHint := hintStyle.Render(" (f)")
+		stats = append(stats, filterBadge+filterHint)
 	}
-	
-	// Sort indicator
+
+	// Sort indicator with inline hint
 	sortBadge := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Background(lipgloss.Color("#7C3AED")).
 		Padding(0, 1).
 		Render("⇅ " + m.GetSortModeName())
-	stats = append(stats, sortBadge)
+	sortHint := hintStyle.Render(" (s)")
+	stats = append(stats, sortBadge+sortHint)
 
 	return lipgloss.JoinHorizontal(lipgloss.Center, stats...)
 }
 
+// renderLegend renders a compact single-line legend (Tuimorphic style)
 func (m Model) renderLegend() string {
-	legend := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		MarginTop(1)
-	
-	dirtyLegend := lipgloss.NewStyle().
-		Foreground(dirtyColor).
-		Bold(true).
-		Render("● Dirty")
-	
-	cleanLegend := lipgloss.NewStyle().
-		Foreground(cleanColor).
-		Bold(true).
-		Render("✓ Clean")
-	
-	editorInfo := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Render(fmt.Sprintf("Editor: %s", m.cfg.Editor))
+	dirty := dirtyDotStyle.Render("●") + legendStyle.Render(" dirty")
+	clean := cleanDotStyle.Render("○") + legendStyle.Render(" clean")
+	editor := legendStyle.Render(fmt.Sprintf("  Editor: %s", m.cfg.Editor))
 
-	return legend.Render(
-		dirtyLegend + "  " + cleanLegend + "     " + editorInfo,
-	)
+	return legendStyle.Render(dirty + "  " + clean + editor)
 }
 
+// renderHelp renders a Tuimorphic keybindings bar with box-drawing separators
 func (m Model) renderHelp() string {
+	sep := keyBindingSepStyle.Render(" │ ")
 	var items []string
 
 	if m.state == StateSearching {
 		// Search mode help
-		items = append(items, helpItem("type", "search"))
-		items = append(items, helpItem("enter", "apply"))
-		items = append(items, helpItem("esc", "cancel"))
+		items = []string{
+			keyBinding("type", "search"),
+			keyBinding("enter", "apply"),
+			keyBinding("esc", "cancel"),
+		}
 	} else if m.activePanel != PanelNone {
 		// Panel active help
-		items = append(items, helpItem("↑↓", "nav"))
-		items = append(items, helpItem("esc", "close"))
-		items = append(items, helpItem("g", "grass"))
-		items = append(items, helpItem("d", "disk"))
-		items = append(items, helpItem("t", "time"))
-		items = append(items, helpItem("q", "quit"))
+		items = []string{
+			keyBinding("↑↓", "nav"),
+			keyBinding("esc", "close"),
+			keyBinding("g", "grass"),
+			keyBinding("d", "disk"),
+			keyBinding("t", "time"),
+			keyBinding("q", "quit"),
+		}
 	} else {
-		// Normal mode help
-		items = append(items, helpItem("↑↓", "nav"))
-		items = append(items, helpItem("enter", "open"))
-		items = append(items, helpItem("/", "search"))
-		items = append(items, helpItem("f", "filter"))
-		items = append(items, helpItem("s", "sort"))
-		items = append(items, helpItem("g", "grass"))
-		items = append(items, helpItem("d", "disk"))
-		items = append(items, helpItem("t", "time"))
-		items = append(items, helpItem("c", "clear"))
-		items = append(items, helpItem("r", "rescan"))
-		items = append(items, helpItem("q", "quit"))
+		// Normal mode help - Tuimorphic style
+		items = []string{
+			keyBinding("↑↓", "nav"),
+			keyBinding("enter", "open"),
+			keyBinding("/", "search"),
+			keyBinding("f", "filter"),
+			keyBinding("s", "sort"),
+			keyBinding("g", "grass"),
+			keyBinding("d", "disk"),
+			keyBinding("t", "time"),
+			keyBinding("r", "rescan"),
+			keyBinding("q", "quit"),
+		}
 	}
 
-	return helpStyle.Render(strings.Join(items, " • "))
+	return keyBindingsBarStyle.Render(strings.Join(items, sep))
+}
+
+// keyBinding creates a styled key-action pair for the keybindings bar
+func keyBinding(key, action string) string {
+	return keyBindingKeyStyle.Render(key) + " " + action
 }
