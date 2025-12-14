@@ -72,6 +72,7 @@ function showCopyFeedback() {
 function copyScriptCommand() {
     const command = "curl -sSL https://raw.githubusercontent.com/Bharath-code/git-scope/main/scripts/install.sh | sh";
 
+    // Fallback for non-secure contexts
     if (!navigator.clipboard) {
         const ta = document.createElement('textarea');
         ta.value = command;
@@ -79,21 +80,44 @@ function copyScriptCommand() {
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-    } else {
-        navigator.clipboard.writeText(command);
+        showScriptCopyFeedback();
+        trackEvent('script-command-copied', 'Copied curl install command');
+        return;
     }
 
-    const feedback = document.getElementById('script-copy-feedback');
-    if (feedback) {
-        feedback.style.opacity = '1';
-        setTimeout(() => { feedback.style.opacity = '0'; }, 2000);
-    }
-    trackEvent('script-command-copied', 'Copied curl install command');
+    navigator.clipboard.writeText(command).then(() => {
+        showScriptCopyFeedback();
+        trackEvent('script-command-copied', 'Copied curl install command');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
+function showScriptCopyFeedback() {
+    const icon = document.getElementById('script-copy-icon');
+    if (!icon) return;
+
+    const originalHTML = icon.innerHTML;
+
+    // Change to Checkmark
+    icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+    icon.style.opacity = '1';
+    icon.style.color = '#27C93F'; // Green from theme
+
+    setTimeout(() => {
+        icon.innerHTML = originalHTML;
+        icon.style.opacity = '0.5';
+        icon.style.color = 'currentColor';
+    }, 2000);
 }
 
 // ===============================
 // CLICK TRACKING
 // ===============================
+document.querySelector('.support-btn')?.addEventListener('click', () => {
+    trackEvent('sponsor-click', 'Clicked Sponsor Button in Nav');
+});
+
 document.getElementById('nav-github-link')?.addEventListener('click', () => {
     trackEvent('github-star-click', 'Clicked GitHub Stars in Nav');
 });
@@ -117,7 +141,9 @@ document.getElementById('features-view-all')?.addEventListener('click', () => {
 document.querySelectorAll('footer a').forEach(link => {
     link.addEventListener('click', () => {
         const linkName = link.textContent.trim();
-        trackEvent('footer-click-' + linkName.toLowerCase().replace(/\s+/g, '-'), 'Clicked ' + linkName + ' in footer');
+        // Clean up SVG content if present in link text
+        const cleanName = linkName || link.getAttribute('aria-label') || 'icon';
+        trackEvent('footer-click-' + cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-'), 'Clicked ' + cleanName + ' in footer');
     });
 });
 
