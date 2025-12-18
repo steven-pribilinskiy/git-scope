@@ -174,3 +174,138 @@ window.addEventListener('beforeunload', () => {
         totalEvents: analytics.events.length
     });
 });
+
+// ===============================
+// SCROLL REVEAL (IntersectionObserver)
+// ===============================
+const revealElements = document.querySelectorAll('.reveal');
+const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('revealed');
+            // Also reveal staggered children
+            const staggerChildren = entry.target.querySelectorAll('.reveal-stagger > *');
+            staggerChildren.forEach((child, index) => {
+                setTimeout(() => {
+                    child.style.opacity = '1';
+                    child.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+        }
+    });
+}, {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+});
+
+revealElements.forEach(el => revealObserver.observe(el));
+
+// Also handle reveal-stagger children initial state
+document.querySelectorAll('.reveal-stagger > *').forEach(child => {
+    child.style.opacity = '0';
+    child.style.transform = 'translateY(20px)';
+    child.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+});
+
+// ===============================
+// HAMBURGER MENU
+// ===============================
+const hamburger = document.getElementById('hamburger');
+const mobileNav = document.getElementById('mobileNav');
+
+if (hamburger && mobileNav) {
+    hamburger.addEventListener('click', () => {
+        hamburger.classList.toggle('active');
+        mobileNav.classList.toggle('open');
+        document.body.style.overflow = mobileNav.classList.contains('open') ? 'hidden' : '';
+    });
+
+    // Close menu when clicking nav links
+    mobileNav.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+            hamburger.classList.remove('active');
+            mobileNav.classList.remove('open');
+            document.body.style.overflow = '';
+        });
+    });
+}
+
+// ===============================
+// STICKY CTA PULSE (Mobile)
+// ===============================
+const mobileFooterBtn = document.querySelector('.mobile-footer-btn');
+if (mobileFooterBtn) {
+    // Add pulse class after a short delay to draw attention
+    setTimeout(() => {
+        mobileFooterBtn.classList.add('pulse');
+    }, 2000);
+
+    // Remove pulse after animation completes (3 cycles * 2s = 6s)
+    setTimeout(() => {
+        mobileFooterBtn.classList.remove('pulse');
+    }, 8000);
+}
+
+// ===============================
+// SKELETON LOADER
+// ===============================
+document.querySelectorAll('.skeleton-wrapper img').forEach(img => {
+    if (img.complete) {
+        img.closest('.skeleton-wrapper')?.classList.add('loaded');
+    } else {
+        img.addEventListener('load', () => {
+            img.closest('.skeleton-wrapper')?.classList.add('loaded');
+        });
+    }
+});
+
+// ===============================
+// KONAMI CODE EASTER EGG
+// ===============================
+const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+let konamiIndex = 0;
+
+document.addEventListener('keydown', (e) => {
+    if (e.code === konamiCode[konamiIndex]) {
+        konamiIndex++;
+        if (konamiIndex === konamiCode.length) {
+            // Easter egg triggered!
+            document.body.classList.add('konami-active');
+            trackEvent('konami-triggered', 'User triggered Konami code easter egg');
+
+            // Show a fun message
+            const easterEgg = document.createElement('div');
+            easterEgg.innerHTML = '🎮 You found the easter egg! 🎉';
+            easterEgg.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: linear-gradient(135deg, #7C3AED, #EC4899);
+                color: white;
+                padding: 2rem 3rem;
+                border-radius: 16px;
+                font-size: 1.5rem;
+                font-weight: 700;
+                z-index: 10000;
+                animation: fadeInUp 0.5s ease;
+                box-shadow: 0 20px 50px rgba(139, 92, 246, 0.5);
+            `;
+            document.body.appendChild(easterEgg);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                easterEgg.style.opacity = '0';
+                easterEgg.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => {
+                    easterEgg.remove();
+                    document.body.classList.remove('konami-active');
+                }, 500);
+            }, 3000);
+
+            konamiIndex = 0;
+        }
+    } else {
+        konamiIndex = 0;
+    }
+});

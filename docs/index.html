@@ -88,7 +88,6 @@
             color: var(--text-main);
             font-family: 'Inter', system-ui, sans-serif;
             line-height: 1.5;
-            overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -121,8 +120,6 @@
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 2rem;
-            overflow-x: hidden;
-            /* Clip anything that sticks out of container */
         }
 
         /* Nav */
@@ -141,6 +138,24 @@
             border-radius: 16px;
             margin-top: 20px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            animation: nav-pulse 3s ease-in-out;
+        }
+
+        @keyframes nav-pulse {
+            0% {
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+                border-color: rgba(255, 255, 255, 0.1);
+            }
+
+            50% {
+                box-shadow: 0 0 30px var(--primary-glow);
+                border-color: var(--primary);
+            }
+
+            100% {
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+                border-color: rgba(255, 255, 255, 0.1);
+            }
         }
 
         .logo {
@@ -1095,6 +1110,274 @@
             line-height: 1;
             padding: 2px 4px;
             white-space: nowrap;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        kbd:active,
+        .kb-key:active {
+            transform: translateY(2px);
+            box-shadow: 0 0 1px rgba(0, 0, 0, 0.2) inset;
+        }
+
+        /* ========== SCROLL REVEAL ========== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .reveal.revealed {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Staggered delays for children */
+        .reveal-stagger>*:nth-child(1) {
+            transition-delay: 0s;
+        }
+
+        .reveal-stagger>*:nth-child(2) {
+            transition-delay: 0.1s;
+        }
+
+        .reveal-stagger>*:nth-child(3) {
+            transition-delay: 0.2s;
+        }
+
+        /* ========== FEATURE VISUAL HOVER ========== */
+        .feature-visual {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-visual:hover {
+            transform: scale(1.02);
+            box-shadow: 0 20px 50px rgba(139, 92, 246, 0.2);
+        }
+
+        /* ========== SECTION SEPARATORS ========== */
+        .section-divider {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent 0%, var(--border) 50%, transparent 100%);
+            margin: 4rem auto;
+            max-width: 600px;
+        }
+
+        /* ========== ROADMAP BADGES ========== */
+        .badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .badge-planned {
+            background: rgba(139, 92, 246, 0.15);
+            color: #C4B5FD;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .badge-progress {
+            background: rgba(34, 197, 94, 0.15);
+            color: #86EFAC;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        /* ========== HAMBURGER MENU ========== */
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            padding: 8px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            z-index: 101;
+        }
+
+        .hamburger span {
+            display: block;
+            width: 24px;
+            height: 2px;
+            background: var(--text-main);
+            transition: transform 0.3s, opacity 0.3s;
+        }
+
+        .hamburger.active span:nth-child(1) {
+            transform: rotate(45deg) translate(5px, 5px);
+        }
+
+        .hamburger.active span:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger.active span:nth-child(3) {
+            transform: rotate(-45deg) translate(5px, -5px);
+        }
+
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: rgba(3, 3, 5, 0.98);
+            z-index: 99;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .mobile-nav.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .mobile-nav a {
+            color: var(--text-main);
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .mobile-nav a:hover {
+            color: var(--primary);
+        }
+
+        @media (max-width: 768px) {
+            .hamburger {
+                display: flex;
+            }
+
+            .mobile-nav {
+                display: flex;
+            }
+        }
+
+        /* ========== STICKY CTA PULSE ========== */
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 4px 12px rgba(46, 164, 79, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 4px 20px rgba(46, 164, 79, 0.7), 0 0 0 8px rgba(46, 164, 79, 0.1);
+            }
+        }
+
+        .mobile-footer-btn.pulse {
+            animation: pulse 2s ease-in-out 3;
+        }
+
+        /* ========== SKELETON LOADER ========== */
+        .skeleton-wrapper {
+            position: relative;
+            background: var(--surface);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .skeleton-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            100% {
+                left: 100%;
+            }
+        }
+
+        .skeleton-wrapper img {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .skeleton-wrapper.loaded::before {
+            display: none;
+        }
+
+        .skeleton-wrapper.loaded img {
+            opacity: 1;
+        }
+
+        /* ========== FOOTER WAVE ========== */
+        .footer-wave {
+            width: 100%;
+            height: 60px;
+            margin-bottom: -1px;
+        }
+
+        .footer-wave svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ========== TOUCH TARGETS ========== */
+        @media (max-width: 768px) {
+
+            .support-btn,
+            .nav-links a,
+            .footer-links a,
+            .tab-btn,
+            .secondary-btn,
+            .hero-cta-btn {
+                min-height: 44px;
+                min-width: 44px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+
+        /* ========== RESPONSIVE BADGES ========== */
+        .badge-mobile {
+            display: none !important;
+        }
+
+        @media (max-width: 480px) {
+            .badge-desktop {
+                display: none !important;
+            }
+
+            .badge-mobile {
+                display: inline-block !important;
+            }
+        }
+
+        /* ========== KONAMI EASTER EGG ========== */
+        .konami-active {
+            animation: rainbow 2s linear infinite;
+        }
+
+        @keyframes rainbow {
+            0% {
+                filter: hue-rotate(0deg);
+            }
+
+            100% {
+                filter: hue-rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -1123,13 +1406,30 @@
 
                 <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
                 <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=Downloads"
-                    alt="Downloads" width="90" height="20" class="nav-badge">
+                    alt="Downloads" width="90" height="20" class="nav-badge badge-desktop">
+                <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=DL"
+                    alt="Downloads" width="50" height="20" class="nav-badge badge-mobile">
                 <a href="https://github.com/Bharath-code/git-scope" target="_blank" style="text-decoration: none;"
                     id="nav-github-link">
                     <img src="https://img.shields.io/github/stars/Bharath-code/git-scope?style=social"
                         alt="GitHub Stars" width="80" height="20" class="nav-badge">
                 </a>
+
+                <!-- Hamburger Menu -->
+                <button class="hamburger" id="hamburger" aria-label="Toggle menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
             </div>
+        </nav>
+
+        <!-- Mobile Nav Overlay -->
+        <nav class="mobile-nav" id="mobileNav">
+            <a href="#features" class="mobile-nav-link">Features</a>
+            <a href="#blog" class="mobile-nav-link">Blog</a>
+            <a href="#contact" class="mobile-nav-link">Contact</a>
+            <a href="https://github.com/Bharath-code/git-scope" target="_blank" class="mobile-nav-link">GitHub</a>
         </nav>
 
         <main>
@@ -1282,10 +1582,11 @@
             </section>
 
             <!-- Features Zig-Zag -->
+            <hr class="section-divider">
             <div class="features-section" id="features">
 
                 <!-- Feature 1 -->
-                <div class="feature-row">
+                <div class="feature-row reveal">
                     <div class="feature-visual">
                         <picture>
                             <source media="(max-width: 768px)" srcset="images/feature-search-mobile.jpg"
@@ -1303,7 +1604,7 @@
                 </div>
 
                 <!-- Feature 2 -->
-                <div class="feature-row">
+                <div class="feature-row reveal">
                     <div class="feature-visual">
                         <picture>
                             <source media="(max-width: 768px)" srcset="images/feature-radar-mobile.jpg"
@@ -1321,7 +1622,7 @@
                 </div>
 
                 <!-- Feature 3 -->
-                <div class="feature-row">
+                <div class="feature-row reveal">
                     <div class="feature-visual">
                         <picture>
                             <source media="(max-width: 768px)" srcset="images/feature-stats-mobile.jpg"
@@ -1395,36 +1696,43 @@
                 </div>
             </section>
 
-            <section class="roadmap" style="margin-bottom: 6rem; text-align: center;">
+            <hr class="section-divider">
+
+            <section class="roadmap reveal" style="margin-bottom: 6rem; text-align: center;">
                 <p
                     style="color: var(--primary); font-weight: 600; letter-spacing: 0.05em; margin-bottom: 1rem; text-transform: uppercase; font-size: 0.9rem;">
                     Coming Soon</p>
                 <h2 style="font-size: clamp(2rem, 3vw, 2.5rem); margin-bottom: 3rem; font-weight: 700;">Roadmap</h2>
 
-                <div class="features" style="max-width: 900px; text-align: left;">
+                <div class="features reveal-stagger" style="max-width: 900px; text-align: left;">
                     <div class="card">
-                        <h3><span class="card-icon">👁️</span> Background Watcher</h3>
+                        <h3><span class="card-icon">👁️</span> Background Watcher <span
+                                class="badge badge-planned">Planned</span></h3>
                         <p>Daemon mode to watch filesystem changes in real-time without manual rescans.</p>
                     </div>
                     <div class="card">
-                        <h3><span class="card-icon">🚀</span> Quick Actions</h3>
+                        <h3><span class="card-icon">🚀</span> Quick Actions <span class="badge badge-progress">In
+                                Progress</span></h3>
                         <p>Pull, push, and sync repositories directly from the dashboard.</p>
                     </div>
                     <div class="card">
-                        <h3><span class="card-icon">👥</span> Team Dashboards</h3>
+                        <h3><span class="card-icon">👥</span> Team Dashboards <span
+                                class="badge badge-planned">Planned</span></h3>
                         <p>Shared configuration and status views for engineering teams.</p>
                     </div>
                 </div>
             </section>
 
-            <section class="resources" id="blog" style="margin-bottom: 6rem; text-align: center;">
+            <hr class="section-divider">
+
+            <section class="resources reveal" id="blog" style="margin-bottom: 6rem; text-align: center;">
                 <p
                     style="color: var(--primary); font-weight: 600; letter-spacing: 0.05em; margin-bottom: 1rem; text-transform: uppercase; font-size: 0.9rem;">
                     From the Blog</p>
                 <h2 style="font-size: clamp(2rem, 3vw, 2.5rem); margin-bottom: 3rem; font-weight: 700;">Resources &
                     Guides</h2>
 
-                <div class="features" style="max-width: 900px; text-align: left;">
+                <div class="features reveal-stagger" style="max-width: 900px; text-align: left;">
                     <a href="https://dev.to/iam_pbk/how-to-tame-your-multi-repo-chaos-with-the-terminal-52bi"
                         target="_blank" class="card" style="text-decoration: none; display: block; height: 100%;">
                         <h3><span class="card-icon">🤯</span> Taming Multi-Repo Chaos</h3>
@@ -1443,6 +1751,15 @@
                 </div>
             </section>
         </main>
+
+        <!-- Footer Wave Separator -->
+        <div class="footer-wave">
+            <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                <path
+                    d="M0 60L60 55C120 50 240 40 360 35C480 30 600 30 720 35C840 40 960 50 1080 52.5C1200 55 1320 50 1380 47.5L1440 45V60H1380C1320 60 1200 60 1080 60C960 60 840 60 720 60C600 60 480 60 360 60C240 60 120 60 60 60H0Z"
+                    fill="#0E0E12" />
+            </svg>
+        </div>
 
         <footer id="contact">
             <div class="footer-links">
