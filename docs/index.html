@@ -1026,6 +1026,76 @@
                 bottom: 90px;
             }
         }
+
+        /* Neo-Brutalist Card Enhancements */
+        .roadmap .card {
+            border: 2px solid var(--border);
+            box-shadow: 4px 4px 0px 0px var(--border);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .roadmap .card:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 8px 8px 0px 0px var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* Hero Animation */
+        .hero-animate {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .delay-1 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-2 {
+            animation-delay: 0.2s;
+        }
+
+        .delay-3 {
+            animation-delay: 0.3s;
+        }
+
+        /* Back to Top Pulse */
+        .back-to-top:hover svg {
+            animation: bounce 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes bounce {
+            from {
+                transform: translateY(0);
+            }
+
+            to {
+                transform: translateY(-3px);
+            }
+        }
+
+        /* KBD Styling override */
+        kbd {
+            background-color: #2D2D2D;
+            border: 1px solid #444;
+            border-radius: 4px;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), 0 2px 0 0 rgba(255, 255, 255, 0.1) inset;
+            color: #fff;
+            display: inline-block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+            font-weight: 700;
+            line-height: 1;
+            padding: 2px 4px;
+            white-space: nowrap;
+        }
     </style>
 </head>
 
@@ -1044,7 +1114,7 @@
                 <!-- Sponsor Button -->
                 <a href="https://buymeacoffee.com/iam_pbk" target="_blank" class="support-btn"
                     aria-label="Sponsor Project">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path
                             d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                     </svg>
@@ -1053,31 +1123,32 @@
 
                 <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
                 <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=Downloads"
-                    alt="Downloads" height="20" class="nav-badge">
+                    alt="Downloads" width="90" height="20" class="nav-badge">
                 <a href="https://github.com/Bharath-code/git-scope" target="_blank" style="text-decoration: none;"
                     id="nav-github-link">
                     <img src="https://img.shields.io/github/stars/Bharath-code/git-scope?style=social"
-                        alt="GitHub Stars" height="20" class="nav-badge">
+                        alt="GitHub Stars" width="80" height="20" class="nav-badge">
                 </a>
             </div>
         </nav>
 
         <main>
             <section class="hero">
-                <h1>Stop <span class="gradient-text">cd-ing.</span> <br> Start Coding.</h1>
-                <p class="subtitle">
+                <h1 class="hero-animate">Stop <span class="gradient-text">cd-ing.</span> <br> Start Coding.</h1>
+                <p class="subtitle hero-animate delay-1">
                     Git-Scope helps busy developers instantly find, filter, and manage their entire git universe so you
                     can stay in your
                     flow state without endlessly <code>cd</code>-ing through nested directories.
                 </p>
 
                 <!-- Hero CTAs -->
-                <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 3rem; flex-wrap: wrap;">
+                <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 3rem; flex-wrap: wrap;"
+                    class="hero-animate delay-2">
                     <a href="https://github.com/Bharath-code/git-scope" target="_blank" class="hero-cta-btn"
                         id="hero-cta-star">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            style="margin-right: 0.5rem;">
+                            style="margin-right: 0.5rem;" aria-hidden="true">
                             <polygon
                                 points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
                             </polygon>
@@ -1108,7 +1179,7 @@
                                     <svg id="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round" class="feather feather-copy"
-                                        style="opacity: 0.5; margin-left: auto; min-width: 16px;">
+                                        style="opacity: 0.5; margin-left: auto; min-width: 16px;" aria-hidden="true">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                     </svg>
@@ -1131,7 +1202,7 @@
                                     <svg id="script-copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round" class="feather feather-copy"
-                                        style="opacity: 0.5; margin-left: auto; min-width: 16px;">
+                                        style="opacity: 0.5; margin-left: auto; min-width: 16px;" aria-hidden="true">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                     </svg>
@@ -1185,11 +1256,11 @@
                 <div
                     style="margin-bottom: 2rem; margin-top: 2rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; opacity: 0.8;">
                     <img src="https://img.shields.io/github/v/release/Bharath-code/git-scope?style=flat-square&color=8B5CF6&label=Latest%20Version"
-                        alt="Latest Version">
+                        alt="Latest Version" width="130" height="20">
                     <img src="https://img.shields.io/github/last-commit/Bharath-code/git-scope?style=flat-square&color=27272A"
-                        alt="Last Commit">
+                        alt="Last Commit" width="140" height="20">
                     <img src="https://img.shields.io/github/license/Bharath-code/git-scope?style=flat-square&color=27272A"
-                        alt="License">
+                        alt="License" width="80" height="20">
                 </div>
 
             </section>
@@ -1286,39 +1357,39 @@
                 <h2 style="font-size: 2rem; margin-bottom: 2rem;">Vim-Style Efficiency</h2>
                 <div class="kb-cheat-sheet">
                     <div class="kb-key-group">
-                        <span class="kb-key">j</span>
+                        <kbd class="kb-key">j</kbd>
                         <span class="kb-desc">Down</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">k</span>
+                        <kbd class="kb-key">k</kbd>
                         <span class="kb-desc">Up</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">/</span>
+                        <kbd class="kb-key">/</kbd>
                         <span class="kb-desc">Search</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">f</span>
+                        <kbd class="kb-key">f</kbd>
                         <span class="kb-desc">Filter</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">s</span>
+                        <kbd class="kb-key">s</kbd>
                         <span class="kb-desc">Sort</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">c</span>
+                        <kbd class="kb-key">c</kbd>
                         <span class="kb-desc">Clear</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">g</span>
+                        <kbd class="kb-key">g</kbd>
                         <span class="kb-desc">graph</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key">q</span>
+                        <kbd class="kb-key">q</kbd>
                         <span class="kb-desc">Quit</span>
                     </div>
                     <div class="kb-key-group">
-                        <span class="kb-key" style="width: auto; padding: 0 1rem;">Enter</span>
+                        <kbd class="kb-key" style="width: auto; padding: 0 1rem;">Enter</kbd>
                         <span class="kb-desc">Open</span>
                     </div>
                 </div>
@@ -1376,19 +1447,19 @@
         <footer id="contact">
             <div class="footer-links">
                 <a href="https://github.com/Bharath-code/" aria-label="GitHub Repository" target="_blank">
-                    <svg height="32" width="32" viewBox="0 0 16 16" fill="currentColor">
+                    <svg height="32" width="32" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                         <path
                             d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
                     </svg>
                 </a>
                 <a href="https://x.com/iam_pbk" aria-label="Twitter Profile" target="_blank">
-                    <svg height="32" width="32" viewBox="0 0 24 24" fill="currentColor">
+                    <svg height="32" width="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path
                             d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.84 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
                     </svg>
                 </a>
                 <a href="mailto:kumarbharath@icloud.com" aria-label="Email Contact">
-                    <svg height="32" width="32" viewBox="0 0 24 24" fill="currentColor">
+                    <svg height="32" width="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path
                             d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
                     </svg>
@@ -1404,7 +1475,7 @@
         <!-- Back to Top Button -->
         <button id="backToTop" class="back-to-top" aria-label="Back to Top">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M18 15l-6-6-6 6" />
             </svg>
         </button>
