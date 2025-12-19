@@ -92,7 +92,7 @@
         }
 
         html {
-            /* overflow-x: hidden; removed to fix sticky nav */
+            overflow-x: hidden;
             scroll-behavior: smooth;
         }
 
@@ -116,10 +116,10 @@
 
         .container {
             width: 100%;
-            /* Ensure container doesn't exceed viewport */
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 2rem;
+            overflow-x: hidden;
         }
 
         /* Nav */
@@ -239,35 +239,42 @@
 
         @media (max-width: 768px) {
             nav {
-                /* flex-wrap: wrap; removed to keep items on same line */
-                gap: 0.5rem;
+                gap: 0.75rem;
                 justify-content: space-between;
-                padding-left: 1rem;
-                padding-right: 1rem;
+                padding: 1rem 1.25rem;
+                top: 10px;
+                margin-top: 10px;
             }
 
-            /* Hide nav links on mobile to prevent layout issues */
+            .nav-separator {
+                display: none;
+            }
+
+            .nav-badge.badge-desktop,
+            .nav-badge.badge-mobile {
+                display: none !important;
+            }
+
             .nav-links {
                 display: none;
             }
 
-            /* Show only icon on mobile to save space */
             .support-text {
                 display: none;
             }
 
             .support-btn {
                 padding: 0.4rem;
-                /* Smaller padding for icon-only */
             }
 
             .nav-right {
                 gap: 0.5rem;
-                /* Tighten gap on mobile */
+                flex: 1;
+                justify-content: flex-end;
             }
 
             .logo {
-                margin-right: 0;
+                font-size: 1.1rem;
             }
         }
 
@@ -1256,6 +1263,21 @@
             color: var(--primary);
         }
 
+        .mobile-nav-badges {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            align-items: center;
+            margin-top: 1rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            width: 80%;
+        }
+
+        .mobile-nav-badges img {
+            height: 24px !important;
+        }
+
         @media (max-width: 768px) {
             .hamburger {
                 display: flex;
@@ -1404,7 +1426,7 @@
                     <span class="support-text">Sponsor</span>
                 </a>
 
-                <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
+                <div class="nav-separator" style="width: 1px; height: 24px; background: rgba(255,255,255,0.1);"></div>
                 <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=Downloads"
                     alt="Downloads" width="90" height="20" class="nav-badge badge-desktop">
                 <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=DL"
@@ -1429,7 +1451,12 @@
             <a href="#features" class="mobile-nav-link">Features</a>
             <a href="#blog" class="mobile-nav-link">Blog</a>
             <a href="#contact" class="mobile-nav-link">Contact</a>
-            <a href="https://github.com/Bharath-code/git-scope" target="_blank" class="mobile-nav-link">GitHub</a>
+            <div class="mobile-nav-badges">
+                <img src="https://img.shields.io/github/downloads/Bharath-code/git-scope/total?style=flat-square&color=7C3AED&label=Downloads"
+                    alt="Downloads" width="90" height="20">
+                <a href="https://github.com/Bharath-code/git-scope" target="_blank" class="mobile-nav-link"
+                    style="font-size: 1.1rem;">GitHub</a>
+            </div>
         </nav>
 
         <main>
@@ -1680,6 +1707,10 @@
                     <div class="kb-key-group">
                         <kbd class="kb-key">c</kbd>
                         <span class="kb-desc">Clear</span>
+                    </div>
+                    <div class="kb-key-group">
+                        <kbd class="kb-key">w</kbd>
+                        <span class="kb-desc">Workspace</span>
                     </div>
                     <div class="kb-key-group">
                         <kbd class="kb-key">g</kbd>
