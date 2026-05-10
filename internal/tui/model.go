@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/Bharath-code/git-scope/internal/cache"
 	"github.com/Bharath-code/git-scope/internal/config"
 	"github.com/Bharath-code/git-scope/internal/model"
 	"github.com/Bharath-code/git-scope/internal/stats"
@@ -69,6 +71,14 @@ type Model struct {
 	grassData    *stats.ContributionData
 	diskData     *stats.DiskUsageData
 	timelineData *stats.TimelineData
+	// Panel render cache. Rendering a panel involves O(repos) styled-string
+	// construction and lipgloss ANSI work — doing that on every key press
+	// while a panel is open produces visible repaint churn. We render once
+	// per data-update / resize and reuse the string everywhere else.
+	// Empty string means "rebuild on next read".
+	grassRendered    string
+	diskRendered     string
+	timelineRendered string
 	// Workspace switch state
 	workspaceInput  textinput.Model
 	workspaceError  string
@@ -89,6 +99,9 @@ type Model struct {
 	// True while a stale-while-revalidate background refresh is in flight.
 	// Drives a subtle "↻ refreshing" indicator in the stats bar.
 	refreshing bool
+	// Timestamp of the data currently in m.repos when it came from cache.
+	// Used by Init to decide whether to kick off a background refresh.
+	cachedAt time.Time
 	// Action-menu state (StateActionMenu).
 	// actionCursor: index of the highlighted action in cfg.Actions.
 	// confirmDelete: true while a delete is awaiting one-keystroke confirm.
@@ -180,7 +193,7 @@ func NewModel(cfg *config.Config) Model {
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
 
-	return Model{
+	m := Model{
 		cfg:              cfg,
 		table:            t,
 		textInput:        ti,
@@ -197,12 +210,38 @@ func NewModel(cfg *config.Config) Model {
 		actionValueIn:    avalue,
 		actionEditIndex:  -1,
 	}
+
+	// Pre-load the cache synchronously so warm starts boot straight into
+	// the dashboard with no loading flash. The on-disk cache is just a
+	// JSON file — reading it costs ~ms. We also decide here whether the
+	// cache is stale (a background refresh will be kicked off by Init).
+	store := cache.NewFileStore()
+	if cached, err := store.Load(); err == nil && store.IsSameRoots(cfg.Roots) {
+		m.repos = cached.Repos
+		m.lastScanIncludesWorktrees = cached.IncludeWorktrees
+		m.state = StateReady
+		m.cachedAt = cached.Timestamp
+		m.updateTable()
+		if time.Since(cached.Timestamp) > cfg.CacheFreshnessDuration() {
+			m.refreshing = true
+		}
+	}
+	return m
 }
 
-// Init initializes the model. Stale-while-revalidate: cache load and refresh
-// run in parallel so the table renders without waiting for the fresh scan.
+// Init initializes the model. The cache was already loaded synchronously
+// in NewModel; here we only schedule work:
+//   - state==Loading: no cache — run a cold scan, spinner ticks.
+//   - refreshing==true: stale cache — kick off the background refresh.
+//   - otherwise: fresh cache, nothing to do.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, loadAndRefreshCmd(m.cfg, m.includeWorktrees))
+	if m.state != StateReady {
+		return tea.Batch(m.spinner.Tick, refreshScanCmd(m.cfg, m.includeWorktrees))
+	}
+	if m.refreshing {
+		return refreshScanCmd(m.cfg, m.includeWorktrees)
+	}
+	return nil
 }
 
 // GetSelectedRepo returns the currently selected repo
@@ -420,7 +459,9 @@ func formatNumber(n int) string {
 
 // resizeTable calculates and sets the correct table height based on UI state
 func (m *Model) resizeTable() {
-	usedHeight := 12 // Header + Stats + Legend + Help + Padding
+	// Header(2) + Stats(1) + gap(1) + table-trailing(1) + status(1) +
+	// legend(1) + help(1) + safety(4) = 12.
+	usedHeight := 12
 	if m.state == StateSearching {
 		usedHeight += 3 // Search input
 	} else if m.searchQuery != "" {

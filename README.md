@@ -182,6 +182,13 @@ editor: code # options: code,nvim,lazygit,vim,cursor
 # dashboard and stats.
 includeWorktrees: false
 
+# How long the on-disk scan cache stays "fresh" — cache reads younger
+# than this serve without firing a background refresh, so a quick
+# relaunch sees no churn. Older cache is still shown immediately while
+# a background scan runs and swaps in the result. Default: 1m.
+# Accepts any Go duration string: 30s, 1m, 5m, 1h.
+cacheFreshness: 1m
+
 # Keyboard-driven actions on the currently selected repo. The `enter`
 # entry is what runs on Enter; the others fire on their Alt+<letter>
 # shortcut. Each action sets exactly one of `run` (shell command) or

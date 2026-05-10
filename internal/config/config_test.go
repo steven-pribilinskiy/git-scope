@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWriteActions_PreservesComments(t *testing.T) {
@@ -85,6 +86,28 @@ func TestWriteActions_AppendsWhenAbsent(t *testing.T) {
 	}
 	if len(cfg.Actions) != 1 {
 		t.Errorf("expected 1 action, got %d", len(cfg.Actions))
+	}
+}
+
+func TestCacheFreshnessDuration(t *testing.T) {
+	cases := []struct {
+		name, in string
+		want     time.Duration
+	}{
+		{"empty falls back to default", "", DefaultCacheFreshness},
+		{"explicit 30s", "30s", 30 * time.Second},
+		{"explicit 5m", "5m", 5 * time.Minute},
+		{"unparseable falls back", "potato", DefaultCacheFreshness},
+		{"zero falls back", "0s", DefaultCacheFreshness},
+		{"negative falls back", "-1m", DefaultCacheFreshness},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Config{CacheFreshness: tc.in}
+			if got := c.CacheFreshnessDuration(); got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

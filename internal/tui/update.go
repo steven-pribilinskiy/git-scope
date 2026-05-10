@@ -28,6 +28,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.resizeTable()
+		// Panel renders depend on width/height — rebuild any that have
+		// data so the next View paints at the new size without going
+		// through the lazy fallback path.
+		if m.grassData != nil {
+			m.grassRendered = renderGrassPanel(m.grassData, m.width/2, m.height-15)
+		}
+		if m.diskData != nil {
+			m.diskRendered = renderDiskPanel(m.diskData, m.width/2, m.height-15)
+		}
+		if m.timelineData != nil {
+			m.timelineRendered = renderTimelinePanel(m.timelineData, m.width/2, m.height-15)
+		}
 
 	case spinner.TickMsg:
 		// Update spinner during loading
@@ -36,47 +48,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
-	case cacheLoadedMsg:
-		// SWR fast path: show cached data immediately. The background
-		// refresh fired alongside this will update the table when it lands.
-		//
-		// Race guard: if the refresh somehow finished first (we've already
-		// flipped refreshing off and have data), don't overwrite the fresh
-		// result with stale cache.
-		if !m.refreshing && len(m.repos) > 0 {
+	case refreshCompleteMsg:
+		// Worktree-setting race: a W toggle since this refresh was kicked
+		// off invalidates the result. Drop it and clear the indicator —
+		// the new toggle has already queued its own refresh.
+		if msg.includedWorktrees != m.includeWorktrees {
+			m.refreshing = false
 			return m, nil
 		}
-		m.repos = msg.repos
-		m.lastScanIncludesWorktrees = msg.includedWorktrees
-		m.state = StateReady
-		m.resetPage()
-		m.updateTable()
-		m.refreshing = true
-		if len(msg.repos) == 0 {
-			m.statusMsg = "↻ Scanning..."
-		} else {
-			m.statusMsg = fmt.Sprintf("✓ %d repos (cached) · ↻ refreshing…", len(msg.repos))
-		}
-		return m, nil
-
-	case cacheMissMsg:
-		// No usable cache. Stay in loading state until the in-flight
-		// refresh completes.
-		m.refreshing = true
-		return m, nil
-
-	case refreshCompleteMsg:
-		// Discard if the in-flight refresh's worktree setting no longer
-		// matches the user's current preference (raced with a W toggle).
-		// The newer refresh will arrive shortly.
-		if msg.includedWorktrees != m.includeWorktrees {
+		// Silent path: if the fresh data is byte-identical to what's on
+		// screen, drop the badge and stop. No table rebuild, no status
+		// churn — the user sees nothing flicker.
+		if reposEqual(m.repos, msg.repos) {
+			m.refreshing = false
+			m.lastScanIncludesWorktrees = msg.includedWorktrees
 			return m, nil
 		}
 		m.repos = msg.repos
 		m.lastScanIncludesWorktrees = msg.includedWorktrees
 		m.refreshing = false
 		m.state = StateReady
-		m.resetPage()
+		// Don't resetPage — the user may have been browsing. Clamp the
+		// cursor to a valid page if the repo count shrank.
+		if total := m.getTotalPages(); m.currentPage >= total {
+			m.currentPage = total - 1
+		}
+		if m.currentPage < 0 {
+			m.currentPage = 0
+		}
 		m.updateTable()
 		if len(msg.repos) == 0 {
 			m.statusMsg = "⚠️  No git repos found in configured directories. Press 'r' to rescan or run 'git-scope init' to configure."
@@ -167,6 +166,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case grassDataLoadedMsg:
 		m.grassData = msg.data
+		m.grassRendered = renderGrassPanel(msg.data, m.width/2, m.height-15)
 		if msg.data != nil {
 			m.statusMsg = fmt.Sprintf("🌿 %d commits in %d weeks", msg.data.TotalCommits, msg.data.WeeksCount)
 		}
@@ -174,6 +174,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case diskDataLoadedMsg:
 		m.diskData = msg.data
+		m.diskRendered = renderDiskPanel(msg.data, m.width/2, m.height-15)
 		if msg.data != nil {
 			m.statusMsg = fmt.Sprintf("💾 %s total across %d repos", stats.FormatBytes(msg.data.TotalSize), msg.data.RepoCount)
 		}
@@ -181,6 +182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case timelineDataLoadedMsg:
 		m.timelineData = msg.data
+		m.timelineRendered = renderTimelinePanel(msg.data, m.width/2, m.height-15)
 		if msg.data != nil {
 			m.statusMsg = fmt.Sprintf("⏰ %d repos with recent activity", len(msg.data.Entries))
 		}

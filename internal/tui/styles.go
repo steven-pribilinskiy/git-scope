@@ -131,10 +131,13 @@ var (
 	helpDescStyle = lipgloss.NewStyle().
 			Foreground(mutedColor)
 
-	// Status message
+	// Status message. Single line, no margin — the dashboard reserves a
+	// permanent slot for it so the layout height doesn't change when the
+	// status text appears or disappears (a dynamic height shift below the
+	// table causes terminal-level scroll and visible shimmer between
+	// frames).
 	statusStyle = lipgloss.NewStyle().
-			Foreground(accentColor).
-			MarginTop(1)
+		Foreground(accentColor)
 
 	// Error styling
 	errorTitleStyle = lipgloss.NewStyle().

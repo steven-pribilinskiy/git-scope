@@ -130,20 +130,8 @@ func (m Model) renderDashboard() string {
 
 	// Main content area - split pane if panel is active
 	if m.activePanel != PanelNone {
-		// Render table content
 		tableContent := m.table.View()
-
-		// Render panel content based on active panel
-		var panelContent string
-		switch m.activePanel {
-		case PanelGrass:
-			panelContent = renderGrassPanel(m.grassData, m.width/2, m.height-15)
-		case PanelDisk:
-			panelContent = renderDiskPanel(m.diskData, m.width/2, m.height-15)
-		case PanelTimeline:
-			panelContent = renderTimelinePanel(m.timelineData, m.width/2, m.height-15)
-		}
-
+		panelContent := m.panelContent()
 		b.WriteString(renderSplitPane(tableContent, panelContent, m.width-4))
 	} else {
 		// Full-width table
@@ -151,11 +139,15 @@ func (m Model) renderDashboard() string {
 	}
 	b.WriteString("\n")
 
-	// Status message if any
+	// Status row — always rendered (blank when empty) so the dashboard
+	// keeps a constant vertical footprint. Dynamic show/hide here causes
+	// terminal scroll + shimmer between frames.
 	if m.statusMsg != "" {
 		b.WriteString(statusStyle.Render("→ " + m.statusMsg))
-		b.WriteString("\n")
+	} else {
+		b.WriteString(" ")
 	}
+	b.WriteString("\n")
 
 	// Star nudge (if active)
 	if m.showStarNudge {
@@ -286,11 +278,13 @@ func (m Model) renderStats() string {
 
 	// SWR indicator: while a background refresh is in flight, surface a
 	// subtle marker so the user knows the data they're looking at may
-	// update underneath them in a moment.
+	// update underneath them in a moment. Padding mirrors the other
+	// badges so JoinHorizontal doesn't render us touching the neighbour.
 	if m.refreshing {
 		refreshBadge := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FCD34D")).
 			Italic(true).
+			Padding(0, 1).
 			Render("↻ refreshing")
 		stats = append(stats, refreshBadge)
 	}
@@ -433,6 +427,32 @@ func (m Model) renderStarNudge() string {
 	cta := ctaStyle.Render(" (S) Open GitHub")
 
 	return message + cta
+}
+
+// panelContent returns the pre-rendered content for the active panel,
+// preferring the cached string built in Update. View receives the Model by
+// value, so caching has to happen on the Update side; this read-only
+// fallback covers the rare case where View runs before the cache is
+// populated (e.g. data already loaded but render not yet built).
+func (m Model) panelContent() string {
+	switch m.activePanel {
+	case PanelGrass:
+		if m.grassRendered != "" {
+			return m.grassRendered
+		}
+		return renderGrassPanel(m.grassData, m.width/2, m.height-15)
+	case PanelDisk:
+		if m.diskRendered != "" {
+			return m.diskRendered
+		}
+		return renderDiskPanel(m.diskData, m.width/2, m.height-15)
+	case PanelTimeline:
+		if m.timelineRendered != "" {
+			return m.timelineRendered
+		}
+		return renderTimelinePanel(m.timelineData, m.width/2, m.height-15)
+	}
+	return ""
 }
 
 func (m Model) renderActionMenu() string {

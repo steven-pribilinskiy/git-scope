@@ -31,28 +31,6 @@ func Run(cfg *config.Config) error {
 // structure matches the current request (same roots; worktree setting can
 // differ, the refresh fixes it). Refresh always runs.
 
-// loadCacheCmd reads the on-disk cache and emits it. Emits cacheMissMsg if
-// the cache is absent or structurally incompatible with the current request.
-func loadCacheCmd(cfg *config.Config, includeWorktrees bool) tea.Cmd {
-	return func() tea.Msg {
-		store := cache.NewFileStore()
-		cached, err := store.Load()
-		if err != nil {
-			return cacheMissMsg{}
-		}
-		// Roots must match — different roots mean a different repo universe.
-		// IncludeWorktrees mismatch is tolerated: we'd rather show stale
-		// data than a blank screen; the in-flight refresh corrects it.
-		if !store.IsSameRoots(cfg.Roots) {
-			return cacheMissMsg{}
-		}
-		return cacheLoadedMsg{
-			repos:             cached.Repos,
-			includedWorktrees: cached.IncludeWorktrees,
-		}
-	}
-}
-
 // refreshScanCmd performs a fresh scan and writes the cache.
 func refreshScanCmd(cfg *config.Config, includeWorktrees bool) tea.Cmd {
 	return func() tea.Msg {
@@ -68,25 +46,6 @@ func refreshScanCmd(cfg *config.Config, includeWorktrees bool) tea.Cmd {
 		}
 	}
 }
-
-// loadAndRefreshCmd batches a cache load with a background refresh — the
-// canonical SWR sequence used at most load entry points.
-func loadAndRefreshCmd(cfg *config.Config, includeWorktrees bool) tea.Cmd {
-	return tea.Batch(
-		loadCacheCmd(cfg, includeWorktrees),
-		refreshScanCmd(cfg, includeWorktrees),
-	)
-}
-
-// cacheLoadedMsg carries cached repos delivered to the UI on first paint.
-type cacheLoadedMsg struct {
-	repos             []model.Repo
-	includedWorktrees bool
-}
-
-// cacheMissMsg is emitted when there's no usable cache (cold start or roots
-// changed). The UI shows the loading screen until the refresh lands.
-type cacheMissMsg struct{}
 
 // refreshCompleteMsg carries the result of a background scan. The handler
 // must verify includedWorktrees against the current model — a refresh in
@@ -141,4 +100,44 @@ func findAction(actions []config.Action, key string) (config.Action, bool) {
 		}
 	}
 	return config.Action{}, false
+}
+
+// reposEqual reports whether two repo slices represent the same on-screen
+// state. Scan order isn't stable (worker pool), so we compare by path. We
+// only check fields the TUI actually renders — any extra status field added
+// later needs a matching line here, or refreshes carrying it will be
+// silently dropped as "unchanged".
+func reposEqual(a, b []model.Repo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	index := make(map[string]model.Repo, len(a))
+	for _, r := range a {
+		index[r.Path] = r
+	}
+	for _, r := range b {
+		other, ok := index[r.Path]
+		if !ok {
+			return false
+		}
+		if !repoEqual(other, r) {
+			return false
+		}
+	}
+	return true
+}
+
+func repoEqual(a, b model.Repo) bool {
+	if a.Name != b.Name || a.IsWorktree != b.IsWorktree {
+		return false
+	}
+	return a.Status.Branch == b.Status.Branch &&
+		a.Status.Ahead == b.Status.Ahead &&
+		a.Status.Behind == b.Status.Behind &&
+		a.Status.Staged == b.Status.Staged &&
+		a.Status.Unstaged == b.Status.Unstaged &&
+		a.Status.Untracked == b.Status.Untracked &&
+		a.Status.IsDirty == b.Status.IsDirty &&
+		a.Status.LastCommit.Equal(b.Status.LastCommit) &&
+		a.Status.ScanError == b.Status.ScanError
 }

@@ -7,9 +7,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// DefaultCacheFreshness is the freshness window for the SWR cache when the
+// user hasn't set one. Cache hits younger than this serve without kicking
+// off a background refresh.
+const DefaultCacheFreshness = time.Minute
 
 // Config holds the application configuration
 type Config struct {
@@ -19,6 +25,24 @@ type Config struct {
 	PageSize         int      `yaml:"pageSize,omitempty"`
 	IncludeWorktrees bool     `yaml:"includeWorktrees,omitempty"`
 	Actions          []Action `yaml:"actions,omitempty"`
+	// CacheFreshness controls the SWR cache window — cache reads younger
+	// than this are served without firing a background refresh. Accepts
+	// any Go duration string (`30s`, `1m`, `10m`). Empty or unparseable
+	// values fall back to DefaultCacheFreshness.
+	CacheFreshness string `yaml:"cacheFreshness,omitempty"`
+}
+
+// CacheFreshnessDuration returns the parsed cache freshness window, or the
+// default when the config value is empty / unparseable / non-positive.
+func (c *Config) CacheFreshnessDuration() time.Duration {
+	if c.CacheFreshness == "" {
+		return DefaultCacheFreshness
+	}
+	d, err := time.ParseDuration(c.CacheFreshness)
+	if err != nil || d <= 0 {
+		return DefaultCacheFreshness
+	}
+	return d
 }
 
 // Action is a keyboard-driven command bound to a key. Each action runs against

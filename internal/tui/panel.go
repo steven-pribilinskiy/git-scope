@@ -351,71 +351,87 @@ var (
 	timelineTimeStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 )
 
-// renderTimelinePanel renders the activity timeline panel
+// renderTimelinePanel renders the activity timeline panel.
+//
+// Output height MUST stay within `height` — exceeding it forces a terminal
+// scroll on every frame and shows as visible shimmer. The previous version
+// budgeted by entry "rowCount" but each entry actually emits 3-5 lines
+// (day header, separator, name/branch, message, time-ago); the renderer
+// regularly over-emitted. This version counts emitted lines directly and
+// stops before the next entry would overflow.
 func renderTimelinePanel(data *stats.TimelineData, width, height int) string {
 	if data == nil {
 		return panelMutedStyle.Render("Loading timeline...")
 	}
 
 	var b strings.Builder
-
-	// Title
 	b.WriteString(panelTitleStyle.Render("⏰ Recent Activity"))
 	b.WriteString("\n\n")
+	lines := 2 // title + blank
 
 	if len(data.Entries) == 0 {
 		b.WriteString(panelMutedStyle.Render("No recent commits found."))
 		return b.String()
 	}
 
-	// Show entries grouped by day
-	maxRows := height - 6
-	if maxRows < 5 {
-		maxRows = 5
+	// Reserve two lines for the "... and N more" tail in case we don't fit
+	// everything; if we end up fitting everything, the reservation is fine
+	// — it's just a tiny under-fill.
+	available := height - 2
+	if available < 4 {
+		available = 4
 	}
 
 	currentDayLabel := ""
-	rowCount := 0
+	shown := 0
 
-	for _, entry := range data.Entries {
-		if rowCount >= maxRows {
-			remaining := len(data.Entries) - rowCount
+	for i, entry := range data.Entries {
+		// Compute lines this entry would emit before committing them.
+		entryLines := 2 // name+branch line, time-ago line
+		if entry.Message != "" {
+			entryLines++
+		}
+		if entry.DayLabel != currentDayLabel {
+			entryLines++ // day header
+			if currentDayLabel != "" {
+				entryLines++ // separator blank
+			}
+		}
+		if lines+entryLines > available {
+			remaining := len(data.Entries) - i
 			if remaining > 0 {
-				b.WriteString(panelMutedStyle.Render(fmt.Sprintf("\n  ... and %d more\n", remaining)))
+				b.WriteString("\n")
+				b.WriteString(panelMutedStyle.Render(fmt.Sprintf("  ... and %d more", remaining)))
 			}
 			break
 		}
 
-		// Day header
 		if entry.DayLabel != currentDayLabel {
 			if currentDayLabel != "" {
 				b.WriteString("\n")
+				lines++
 			}
-
 			b.WriteString(timelineDayStyle(entry.DayLabel).Render("● " + entry.DayLabel))
 			b.WriteString("\n")
+			lines++
 			currentDayLabel = entry.DayLabel
-			rowCount++
 		}
 
-		// Entry
 		name := entry.Name
 		if len(name) > 15 {
 			name = name[:14] + "…"
 		}
-
-		b.WriteString("  ")
-		b.WriteString(timelineRepoStyle.Render(name))
-		b.WriteString(" ")
-
 		branch := entry.Branch
 		if len(branch) > 10 {
 			branch = branch[:9] + "…"
 		}
+		b.WriteString("  ")
+		b.WriteString(timelineRepoStyle.Render(name))
+		b.WriteString(" ")
 		b.WriteString(timelineBranchStyle.Render("(" + branch + ")"))
 		b.WriteString("\n")
+		lines++
 
-		// Commit message
 		if entry.Message != "" {
 			msg := entry.Message
 			maxMsgLen := width - 8
@@ -428,15 +444,15 @@ func renderTimelinePanel(data *stats.TimelineData, width, height int) string {
 			b.WriteString("    ")
 			b.WriteString(timelineMessageStyle.Render("\"" + msg + "\""))
 			b.WriteString("\n")
-			rowCount++
+			lines++
 		}
 
-		// Time ago
 		b.WriteString("    ")
 		b.WriteString(timelineTimeStyle.Render(entry.TimeAgo))
 		b.WriteString("\n")
+		lines++
 
-		rowCount += 2
+		shown++
 	}
 
 	return b.String()
