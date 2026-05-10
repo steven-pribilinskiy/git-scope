@@ -86,6 +86,9 @@ type Model struct {
 	// If true and the user toggles worktrees off, we can filter in-memory
 	// without rescanning. If false and the user toggles them on, we must rescan.
 	lastScanIncludesWorktrees bool
+	// True while a stale-while-revalidate background refresh is in flight.
+	// Drives a subtle "↻ refreshing" indicator in the stats bar.
+	refreshing bool
 	// Action-menu state (StateActionMenu).
 	// actionCursor: index of the highlighted action in cfg.Actions.
 	// confirmDelete: true while a delete is awaiting one-keystroke confirm.
@@ -196,9 +199,10 @@ func NewModel(cfg *config.Config) Model {
 	}
 }
 
-// Init initializes the model
+// Init initializes the model. Stale-while-revalidate: cache load and refresh
+// run in parallel so the table renders without waiting for the fresh scan.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, scanReposCmd(m.cfg, false, m.includeWorktrees))
+	return tea.Batch(m.spinner.Tick, loadAndRefreshCmd(m.cfg, m.includeWorktrees))
 }
 
 // GetSelectedRepo returns the currently selected repo

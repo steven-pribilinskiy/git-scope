@@ -284,6 +284,17 @@ func (m Model) renderStats() string {
 		stats = append(stats, pageBadge+pageHint)
 	}
 
+	// SWR indicator: while a background refresh is in flight, surface a
+	// subtle marker so the user knows the data they're looking at may
+	// update underneath them in a moment.
+	if m.refreshing {
+		refreshBadge := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FCD34D")).
+			Italic(true).
+			Render("↻ refreshing")
+		stats = append(stats, refreshBadge)
+	}
+
 	return lipgloss.JoinHorizontal(lipgloss.Center, stats...)
 }
 

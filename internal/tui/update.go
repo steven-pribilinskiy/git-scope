@@ -36,24 +36,64 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
-	case scanCompleteMsg:
+	case cacheLoadedMsg:
+		// SWR fast path: show cached data immediately. The background
+		// refresh fired alongside this will update the table when it lands.
+		//
+		// Race guard: if the refresh somehow finished first (we've already
+		// flipped refreshing off and have data), don't overwrite the fresh
+		// result with stale cache.
+		if !m.refreshing && len(m.repos) > 0 {
+			return m, nil
+		}
 		m.repos = msg.repos
 		m.lastScanIncludesWorktrees = msg.includedWorktrees
 		m.state = StateReady
 		m.resetPage()
 		m.updateTable()
+		m.refreshing = true
+		if len(msg.repos) == 0 {
+			m.statusMsg = "↻ Scanning..."
+		} else {
+			m.statusMsg = fmt.Sprintf("✓ %d repos (cached) · ↻ refreshing…", len(msg.repos))
+		}
+		return m, nil
 
-		// Show helpful message if no repos found
+	case cacheMissMsg:
+		// No usable cache. Stay in loading state until the in-flight
+		// refresh completes.
+		m.refreshing = true
+		return m, nil
+
+	case refreshCompleteMsg:
+		// Discard if the in-flight refresh's worktree setting no longer
+		// matches the user's current preference (raced with a W toggle).
+		// The newer refresh will arrive shortly.
+		if msg.includedWorktrees != m.includeWorktrees {
+			return m, nil
+		}
+		m.repos = msg.repos
+		m.lastScanIncludesWorktrees = msg.includedWorktrees
+		m.refreshing = false
+		m.state = StateReady
+		m.resetPage()
+		m.updateTable()
 		if len(msg.repos) == 0 {
 			m.statusMsg = "⚠️  No git repos found in configured directories. Press 'r' to rescan or run 'git-scope init' to configure."
-		} else if msg.fromCache {
-			m.statusMsg = fmt.Sprintf("✓ Loaded %d repos from cache", len(msg.repos))
 		} else {
-			m.statusMsg = fmt.Sprintf("✓ Found %d repos", len(msg.repos))
+			m.statusMsg = fmt.Sprintf("✓ %d repos", len(msg.repos))
 		}
 		return m, nil
 
 	case scanErrorMsg:
+		// Only escalate to a hard error state when there's no data on
+		// screen — if we already have stale cache visible, surface the
+		// failure as a status line instead.
+		if len(m.repos) > 0 {
+			m.refreshing = false
+			m.statusMsg = "❌ Refresh failed: " + msg.err.Error()
+			return m, nil
+		}
 		m.state = StateError
 		m.err = msg.err
 		return m, nil
@@ -107,7 +147,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMsg = ""
 		}
-		return m, scanReposCmd(m.cfg, true, m.includeWorktrees)
+		// Returning from an action (e.g. editor) — refresh quietly in the
+		// background; the user is back from a context switch and doesn't
+		// need a loading screen.
+		m.refreshing = true
+		return m, refreshScanCmd(m.cfg, m.includeWorktrees)
 
 	case clipboardCopiedMsg:
 		if msg.err != nil {
@@ -221,9 +265,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "r":
-			m.state = StateLoading
-			m.statusMsg = "Rescanning..."
-			return m, scanReposCmd(m.cfg, true, m.includeWorktrees)
+			// SWR: keep the current view on screen and refresh in
+			// background. No StateLoading transition.
+			m.refreshing = true
+			m.statusMsg = "↻ Refreshing…"
+			return m, refreshScanCmd(m.cfg, m.includeWorktrees)
 
 		case "W":
 			// Toggle linked-worktree inclusion. Single command — affects
@@ -254,9 +300,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			m.state = StateLoading
-			m.statusMsg = "Scanning worktrees..."
-			return m, scanReposCmd(m.cfg, true, m.includeWorktrees)
+			// Slow path: we don't have worktree data on disk yet.
+			// Keep the current (worktree-less) view visible while
+			// the background scan loads the larger set.
+			m.refreshing = true
+			m.statusMsg = "↻ Scanning worktrees…"
+			return m, refreshScanCmd(m.cfg, m.includeWorktrees)
 
 		case "f":
 			// Cycle through filter modes
