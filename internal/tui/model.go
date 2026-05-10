@@ -24,6 +24,8 @@ const (
 	StateError
 	StateSearching
 	StateWorkspaceSwitch
+	StateActionMenu
+	StateActionEdit
 )
 
 // SortMode represents different sorting options
@@ -84,6 +86,21 @@ type Model struct {
 	// If true and the user toggles worktrees off, we can filter in-memory
 	// without rescanning. If false and the user toggles them on, we must rescan.
 	lastScanIncludesWorktrees bool
+	// Action-menu state (StateActionMenu).
+	// actionCursor: index of the highlighted action in cfg.Actions.
+	// confirmDelete: true while a delete is awaiting one-keystroke confirm.
+	actionCursor  int
+	confirmDelete bool
+	// Action-edit state (StateActionEdit).
+	// actionEditBuf: the in-flight action being edited; on save it replaces
+	// cfg.Actions[actionEditIndex], or appends when actionEditIndex == -1.
+	actionEditBuf   config.Action
+	actionEditIndex int
+	actionEditField int // 0=key, 1=label, 2=value (run or clipboard)
+	actionKeyInput  textinput.Model
+	actionLabelIn   textinput.Model
+	actionValueIn   textinput.Model
+	actionEditErr   string
 }
 
 // NewModel creates a new TUI model
@@ -141,6 +158,20 @@ func NewModel(cfg *config.Config) Model {
 	wi.CharLimit = 200
 	wi.Width = 40
 
+	// Text inputs for action-edit modal.
+	akey := textinput.New()
+	akey.Placeholder = "alt+r"
+	akey.CharLimit = 16
+	akey.Width = 20
+	alabel := textinput.New()
+	alabel.Placeholder = "Resume Claude"
+	alabel.CharLimit = 60
+	alabel.Width = 40
+	avalue := textinput.New()
+	avalue.Placeholder = "command {path}  —  or text to copy"
+	avalue.CharLimit = 400
+	avalue.Width = 60
+
 	// Create spinner with Braille pattern
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -158,6 +189,10 @@ func NewModel(cfg *config.Config) Model {
 		currentPage:      0,
 		pageSize:         cfg.PageSize,
 		includeWorktrees: cfg.IncludeWorktrees,
+		actionKeyInput:   akey,
+		actionLabelIn:    alabel,
+		actionValueIn:    avalue,
+		actionEditIndex:  -1,
 	}
 }
 

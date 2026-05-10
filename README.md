@@ -151,6 +151,9 @@ Typical git workflows involve "tunnel vision"—working deep inside one reposito
 | `d` | Toggle **Disk Usage** view |
 | `t` | Toggle **Timeline** view |
 | `W` | Toggle **Worktree inclusion** (rescan; affects totals too) |
+| `?` | Open **Actions menu** (configure shortcuts) |
+| `Enter` | Run the configured `enter` action |
+| `Alt+<letter>` | Run a configured `alt+<letter>` action |
 | `q` | Quit |
 
 -----
@@ -178,6 +181,22 @@ editor: code # options: code,nvim,lazygit,vim,cursor
 # --worktrees on the CLI, or press W in the TUI) to include them in the
 # dashboard and stats.
 includeWorktrees: false
+
+# Keyboard-driven actions on the currently selected repo. The `enter`
+# entry is what runs on Enter; the others fire on their Alt+<letter>
+# shortcut. Each action sets exactly one of `run` (shell command) or
+# `clipboard` (text to copy). `{path}` is replaced with the repo path.
+# Open the in-app editor with `?` to add, edit, or delete entries here.
+actions:
+  - key: enter
+    label: "Open in editor"
+    run: "code {path}"
+  - key: alt+c
+    label: "Copy path"
+    clipboard: "{path}"
+  - key: alt+g
+    label: "Open in gitui"
+    run: "gitui -d {path}"
 ```
 
 -----

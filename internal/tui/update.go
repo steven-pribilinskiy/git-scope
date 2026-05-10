@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/Bharath-code/git-scope/internal/browser"
 	"github.com/Bharath-code/git-scope/internal/config"
@@ -83,36 +84,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, nil
 
-	case openEditorMsg:
-		// Parse editor command (handles "editor --flag" style configs)
-		fields, err := shell.Fields(m.cfg.Editor, nil)
+	case runActionMsg:
+		// Substitute {path} and parse the command into argv.
+		cmdLine := strings.ReplaceAll(msg.action.Run, "{path}", msg.path)
+		fields, err := shell.Fields(cmdLine, nil)
 		if err != nil || len(fields) == 0 {
-			m.statusMsg = fmt.Sprintf("❌ Invalid editor command: '%s'", m.cfg.Editor)
+			m.statusMsg = fmt.Sprintf("❌ Invalid command for %q: %s", msg.action.Key, cmdLine)
 			return m, nil
 		}
-		// Check if editor binary exists in PATH
-		_, err = exec.LookPath(fields[0])
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("❌ Editor '%s' not found. Press 'e' to change editor or install it first.", fields[0])
+		if _, err = exec.LookPath(fields[0]); err != nil {
+			m.statusMsg = fmt.Sprintf("❌ '%s' not found on PATH", fields[0])
 			return m, nil
 		}
-
-		args := append(fields[1:], msg.path)
-		c := exec.Command(fields[0], args...)
+		c := exec.Command(fields[0], fields[1:]...)
 		return m, tea.ExecProcess(c, func(err error) tea.Msg {
-			if err != nil {
-				return editorClosedMsg{err: err}
-			}
-			return editorClosedMsg{}
+			return actionFinishedMsg{action: msg.action, err: err}
 		})
 
-	case editorClosedMsg:
+	case actionFinishedMsg:
 		if msg.err != nil {
 			m.statusMsg = "Error: " + msg.err.Error()
 		} else {
 			m.statusMsg = ""
 		}
 		return m, scanReposCmd(m.cfg, true, m.includeWorktrees)
+
+	case clipboardCopiedMsg:
+		if msg.err != nil {
+			m.statusMsg = "❌ Clipboard: " + msg.err.Error()
+		} else {
+			short := msg.text
+			if len(short) > 60 {
+				short = short[:57] + "…"
+			}
+			m.statusMsg = "📋 Copied: " + short
+		}
+		return m, nil
 
 	case grassDataLoadedMsg:
 		m.grassData = msg.data
@@ -146,6 +153,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleWorkspaceSwitchMode(msg)
 		}
 
+		// Action menu / edit modes.
+		if m.state == StateActionMenu {
+			return m.handleActionMenuMode(msg)
+		}
+		if m.state == StateActionEdit {
+			return m.handleActionEditMode(msg)
+		}
+
+		// Configured Alt+* shortcuts run their action directly from the table.
+		if m.state == StateReady && strings.HasPrefix(msg.String(), "alt+") {
+			if a, ok := findAction(m.cfg.Actions, msg.String()); ok {
+				repo := m.GetSelectedRepo()
+				if repo != nil {
+					return m, dispatchAction(a, repo.Path)
+				}
+			}
+		}
+
 		// Normal mode key handling
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -173,12 +198,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if m.state == StateReady {
 				repo := m.GetSelectedRepo()
-				if repo != nil {
-					m.statusMsg = "Opening " + repo.Name + " in " + m.cfg.Editor + "..."
-					return m, func() tea.Msg {
-						return openEditorMsg{path: repo.Path}
-					}
+				if repo == nil {
+					return m, nil
 				}
+				a, ok := findAction(m.cfg.Actions, "enter")
+				if !ok {
+					m.statusMsg = "No 'enter' action configured — press '?' to manage actions"
+					return m, nil
+				}
+				m.statusMsg = a.Label + "..."
+				return m, dispatchAction(a, repo.Path)
+			}
+
+		case "?":
+			if m.state == StateReady {
+				m.state = StateActionMenu
+				if m.actionCursor >= len(m.cfg.Actions) {
+					m.actionCursor = 0
+				}
+				m.confirmDelete = false
+				return m, nil
 			}
 
 		case "r":
@@ -433,11 +472,6 @@ func (m Model) handleSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// editorClosedMsg is sent when the editor process closes
-type editorClosedMsg struct {
-	err error
-}
-
 // grassDataLoadedMsg is sent when contribution data is loaded
 type grassDataLoadedMsg struct {
 	data *stats.ContributionData
@@ -572,4 +606,238 @@ func openBrowserCmd(url string) tea.Cmd {
 		_ = browser.Open(url)
 		return nil
 	}
+}
+
+// handleActionMenuMode dispatches keys while the action menu is open.
+func (m Model) handleActionMenuMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	// First: a pending delete swallows the very next keystroke.
+	if m.confirmDelete {
+		m.confirmDelete = false
+		if key == "y" || key == "Y" {
+			return m.deleteSelectedAction()
+		}
+		// Any other key cancels the delete; fall through to normal dispatch
+		// in case the user wanted to do something else.
+	}
+
+	switch key {
+	case "esc", "?", "q":
+		m.state = StateReady
+		m.statusMsg = ""
+		return m, nil
+	case "up", "k":
+		if m.actionCursor > 0 {
+			m.actionCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.actionCursor < len(m.cfg.Actions)-1 {
+			m.actionCursor++
+		}
+		return m, nil
+	case "enter":
+		if len(m.cfg.Actions) == 0 {
+			return m, nil
+		}
+		a := m.cfg.Actions[m.actionCursor]
+		repo := m.GetSelectedRepo()
+		if repo == nil {
+			return m, nil
+		}
+		m.state = StateReady
+		m.statusMsg = a.Label + "..."
+		return m, dispatchAction(a, repo.Path)
+	case "e":
+		if len(m.cfg.Actions) > 0 {
+			m.openActionEdit(m.actionCursor)
+			return m, textinput.Blink
+		}
+		return m, nil
+	case "a":
+		m.openActionEdit(-1)
+		return m, textinput.Blink
+	case "d":
+		if len(m.cfg.Actions) > 0 {
+			m.confirmDelete = true
+		}
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	}
+
+	// Shortcut key match: run that action.
+	if a, ok := findAction(m.cfg.Actions, key); ok {
+		repo := m.GetSelectedRepo()
+		if repo == nil {
+			return m, nil
+		}
+		m.state = StateReady
+		m.statusMsg = a.Label + "..."
+		return m, dispatchAction(a, repo.Path)
+	}
+	return m, nil
+}
+
+// deleteSelectedAction removes the action under the cursor and persists the
+// change. Returns a no-op command on success.
+func (m Model) deleteSelectedAction() (Model, tea.Cmd) {
+	if len(m.cfg.Actions) == 0 {
+		return m, nil
+	}
+	idx := m.actionCursor
+	deletedKey := m.cfg.Actions[idx].Key
+	m.cfg.Actions = append(m.cfg.Actions[:idx], m.cfg.Actions[idx+1:]...)
+	if m.actionCursor >= len(m.cfg.Actions) && m.actionCursor > 0 {
+		m.actionCursor--
+	}
+	if err := config.WriteActions(config.DefaultConfigPath(), m.cfg.Actions); err != nil {
+		m.statusMsg = "❌ Save failed: " + err.Error()
+	} else {
+		m.statusMsg = "Removed " + deletedKey
+	}
+	return m, nil
+}
+
+// openActionEdit prepares the edit modal for a given index (-1 = new).
+func (m *Model) openActionEdit(idx int) {
+	m.state = StateActionEdit
+	m.actionEditIndex = idx
+	m.actionEditField = 0
+	m.actionEditErr = ""
+
+	if idx >= 0 && idx < len(m.cfg.Actions) {
+		m.actionEditBuf = m.cfg.Actions[idx]
+	} else {
+		m.actionEditBuf = config.Action{Key: "alt+", Label: "", Run: "{path}"}
+	}
+
+	m.actionKeyInput.SetValue(m.actionEditBuf.Key)
+	m.actionLabelIn.SetValue(m.actionEditBuf.Label)
+	if m.actionEditBuf.IsClipboard() {
+		m.actionValueIn.SetValue(m.actionEditBuf.Clipboard)
+	} else {
+		m.actionValueIn.SetValue(m.actionEditBuf.Run)
+	}
+	m.focusEditField()
+}
+
+// focusEditField applies focus to the textinput matching actionEditField.
+func (m *Model) focusEditField() {
+	m.actionKeyInput.Blur()
+	m.actionLabelIn.Blur()
+	m.actionValueIn.Blur()
+	switch m.actionEditField {
+	case 0:
+		m.actionKeyInput.Focus()
+	case 1:
+		m.actionLabelIn.Focus()
+	case 3:
+		m.actionValueIn.Focus()
+	}
+	// field 2 is the run/clipboard type toggle — no textinput focus.
+}
+
+// handleActionEditMode owns key events while the edit modal is open.
+func (m Model) handleActionEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.state = StateActionMenu
+		m.actionEditErr = ""
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	case "tab":
+		m.actionEditField = (m.actionEditField + 1) % 4
+		m.focusEditField()
+		return m, nil
+	case "shift+tab":
+		m.actionEditField = (m.actionEditField + 3) % 4
+		m.focusEditField()
+		return m, nil
+	case " ":
+		// Space toggles the run/clipboard type only when the type field
+		// has focus. Otherwise it's a regular character.
+		if m.actionEditField == 2 {
+			m.actionEditBuf = toggleActionKind(m.actionEditBuf)
+			m.actionValueIn.SetValue(m.actionEditBuf.Value())
+			return m, nil
+		}
+	case "enter":
+		return m.saveActionEdit()
+	}
+
+	// Forward typing to the focused textinput.
+	var cmd tea.Cmd
+	switch m.actionEditField {
+	case 0:
+		m.actionKeyInput, cmd = m.actionKeyInput.Update(msg)
+		m.actionEditBuf.Key = strings.TrimSpace(m.actionKeyInput.Value())
+	case 1:
+		m.actionLabelIn, cmd = m.actionLabelIn.Update(msg)
+		m.actionEditBuf.Label = m.actionLabelIn.Value()
+	case 3:
+		m.actionValueIn, cmd = m.actionValueIn.Update(msg)
+		if m.actionEditBuf.IsClipboard() {
+			m.actionEditBuf.Clipboard = m.actionValueIn.Value()
+		} else {
+			m.actionEditBuf.Run = m.actionValueIn.Value()
+		}
+	}
+	if m.actionEditErr != "" {
+		m.actionEditErr = ""
+	}
+	return m, cmd
+}
+
+// toggleActionKind flips an action between run and clipboard, preserving the
+// current value string under the new field.
+func toggleActionKind(a config.Action) config.Action {
+	val := a.Value()
+	if a.IsClipboard() {
+		a.Clipboard = ""
+		a.Run = val
+	} else {
+		a.Run = ""
+		a.Clipboard = val
+	}
+	return a
+}
+
+// saveActionEdit validates the buffer, applies it to cfg.Actions, and
+// persists to disk.
+func (m Model) saveActionEdit() (Model, tea.Cmd) {
+	buf := m.actionEditBuf
+	buf.Key = strings.TrimSpace(buf.Key)
+	buf.Label = strings.TrimSpace(buf.Label)
+
+	// Build a candidate slice with the edit applied, then validate.
+	candidate := make([]config.Action, len(m.cfg.Actions))
+	copy(candidate, m.cfg.Actions)
+	if m.actionEditIndex >= 0 && m.actionEditIndex < len(candidate) {
+		candidate[m.actionEditIndex] = buf
+	} else {
+		candidate = append(candidate, buf)
+	}
+	if err := config.ValidateActions(candidate); err != nil {
+		m.actionEditErr = err.Error()
+		return m, nil
+	}
+
+	m.cfg.Actions = candidate
+	if err := config.WriteActions(config.DefaultConfigPath(), m.cfg.Actions); err != nil {
+		m.actionEditErr = "Save failed: " + err.Error()
+		return m, nil
+	}
+
+	m.state = StateActionMenu
+	m.actionEditErr = ""
+	if m.actionEditIndex < 0 {
+		m.actionCursor = len(m.cfg.Actions) - 1
+		m.statusMsg = "Added " + buf.Key
+	} else {
+		m.statusMsg = "Saved " + buf.Key
+	}
+	return m, nil
 }

@@ -25,6 +25,10 @@ func (m Model) renderContent() string {
 		b.WriteString(m.renderDashboard())
 	case StateWorkspaceSwitch:
 		b.WriteString(m.renderWorkspaceModal())
+	case StateActionMenu:
+		b.WriteString(m.renderActionMenu())
+	case StateActionEdit:
+		b.WriteString(m.renderActionEditModal())
 	}
 
 	return b.String()
@@ -331,7 +335,8 @@ func (m Model) renderHelp() string {
 		items = []string{
 			keyBinding("↑↓", "nav"),
 			keyBinding("[]", "page"),
-			keyBinding("enter", "open"),
+			keyBinding("enter", "run"),
+			keyBinding("?", "actions"),
 			keyBinding("/", "search"),
 			keyBinding("w", "workspace"),
 			keyBinding("W", wtLabel),
@@ -417,4 +422,158 @@ func (m Model) renderStarNudge() string {
 	cta := ctaStyle.Render(" (S) Open GitHub")
 
 	return message + cta
+}
+
+func (m Model) renderActionMenu() string {
+	var b strings.Builder
+	b.WriteString(compactLogo())
+	b.WriteString("\n\n")
+
+	repoLabel := ""
+	if r := m.GetSelectedRepo(); r != nil {
+		repoLabel = " — " + r.Name
+	}
+	title := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#A78BFA")).
+		Bold(true).
+		Render("⌨️  Actions" + repoLabel)
+
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Padding(1, 2).
+		Width(72)
+
+	rowKey := lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA")).Bold(true)
+	rowLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+	rowValue := lipgloss.NewStyle().Foreground(mutedColor)
+	selectedRow := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#000000")).
+		Background(lipgloss.Color("#A78BFA")).
+		Bold(true)
+	clipMarker := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("📋")
+
+	var rows []string
+	if len(m.cfg.Actions) == 0 {
+		rows = append(rows, lipgloss.NewStyle().Foreground(mutedColor).Italic(true).
+			Render("  (no actions — press 'a' to add one)"))
+	} else {
+		for i, a := range m.cfg.Actions {
+			keyCell := pad(a.Key, 8)
+			labelCell := pad(truncateString(a.Label, 22), 24)
+			var valCell string
+			if a.IsClipboard() {
+				valCell = clipMarker + " " + truncateString(a.Clipboard, 28)
+			} else {
+				valCell = truncateString(a.Run, 30)
+			}
+			line := rowKey.Render(keyCell) + "  " + rowLabel.Render(labelCell) + "  " + rowValue.Render(valCell)
+			cursor := "  "
+			if i == m.actionCursor {
+				cursor = "▸ "
+				line = selectedRow.Render(cursor + rowKey.Render(keyCell) + "  " + rowLabel.Render(labelCell) + "  " + rowValue.Render(valCell))
+			} else {
+				line = cursor + line
+			}
+			rows = append(rows, line)
+		}
+	}
+
+	footer := lipgloss.NewStyle().Foreground(mutedColor).Render(
+		"\n\n↑↓ select · enter run · e edit · a add · d delete · esc close",
+	)
+	if m.confirmDelete {
+		footer = lipgloss.NewStyle().Foreground(lipgloss.Color("#F59E0B")).Render(
+			"\n\nDelete this action? Press 'y' to confirm, any other key to cancel.",
+		)
+	}
+
+	body := title + "\n\n" + strings.Join(rows, "\n") + footer
+	b.WriteString(modalStyle.Render(body))
+	return b.String()
+}
+
+func (m Model) renderActionEditModal() string {
+	var b strings.Builder
+	b.WriteString(compactLogo())
+	b.WriteString("\n\n")
+
+	title := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#A78BFA")).
+		Bold(true).
+		Render("✏️  Edit action")
+
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Padding(1, 2).
+		Width(80)
+
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	focusMarker := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("▸ ")
+	pad := "  "
+
+	lineKey := pad + labelStyle.Render("Key:    ") + m.actionKeyInput.View()
+	lineLabel := pad + labelStyle.Render("Label:  ") + m.actionLabelIn.View()
+
+	kind := "run"
+	if m.actionEditBuf.IsClipboard() {
+		kind = "clipboard"
+	}
+	typeRow := pad + labelStyle.Render("Type:   ") +
+		renderKindToggle(kind) +
+		lipgloss.NewStyle().Foreground(mutedColor).Render("   (space to toggle)")
+
+	valueLabel := "Command:"
+	if m.actionEditBuf.IsClipboard() {
+		valueLabel = "Copy:   "
+	}
+	lineValue := pad + labelStyle.Render(valueLabel) + m.actionValueIn.View()
+
+	switch m.actionEditField {
+	case 0:
+		lineKey = focusMarker + lineKey[len(pad):]
+	case 1:
+		lineLabel = focusMarker + lineLabel[len(pad):]
+	case 2:
+		typeRow = focusMarker + typeRow[len(pad):]
+	case 3:
+		lineValue = focusMarker + lineValue[len(pad):]
+	}
+
+	errLine := ""
+	if m.actionEditErr != "" {
+		errLine = "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Render("❌ "+m.actionEditErr)
+	}
+
+	footer := "\n\n" + lipgloss.NewStyle().Foreground(mutedColor).Render(
+		"tab field · space toggle type · enter save · esc cancel",
+	)
+
+	body := title + "\n\n" + lineKey + "\n" + lineLabel + "\n" + typeRow + "\n" + lineValue + errLine + footer
+	b.WriteString(modalStyle.Render(body))
+	return b.String()
+}
+
+func renderKindToggle(kind string) string {
+	on := lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).
+		Background(lipgloss.Color("#A78BFA")).Bold(true).Padding(0, 1)
+	off := lipgloss.NewStyle().Foreground(mutedColor).Padding(0, 1)
+	run := off.Render("run")
+	clip := off.Render("clipboard")
+	if kind == "clipboard" {
+		clip = on.Render("clipboard")
+	} else {
+		run = on.Render("run")
+	}
+	return run + " " + clip
+}
+
+// pad right-pads s with spaces to width n. ASCII assumption is fine for the
+// short keys/labels we render here.
+func pad(s string, n int) string {
+	if len(s) >= n {
+		return s
+	}
+	return s + strings.Repeat(" ", n-len(s))
 }

@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Bharath-code/git-scope/internal/cache"
+	"github.com/Bharath-code/git-scope/internal/clipboard"
 	"github.com/Bharath-code/git-scope/internal/config"
 	"github.com/Bharath-code/git-scope/internal/model"
 	"github.com/Bharath-code/git-scope/internal/scan"
@@ -72,7 +74,44 @@ type scanErrorMsg struct {
 	err error
 }
 
-// openEditorMsg is sent to trigger opening an editor
-type openEditorMsg struct {
-	path string
+// runActionMsg requests execution of a `run`-type action (shell command).
+type runActionMsg struct {
+	action config.Action
+	path   string
+}
+
+// actionFinishedMsg fires when a launched action's process exits.
+type actionFinishedMsg struct {
+	action config.Action
+	err    error
+}
+
+// clipboardCopiedMsg reports the result of a `clipboard`-type action.
+type clipboardCopiedMsg struct {
+	text string
+	err  error
+}
+
+// dispatchAction routes the action to the right side-effect command.
+// `enter`/alt+* keys from the table and from inside the menu both funnel
+// through here.
+func dispatchAction(a config.Action, repoPath string) tea.Cmd {
+	if a.IsClipboard() {
+		text := strings.ReplaceAll(a.Clipboard, "{path}", repoPath)
+		return func() tea.Msg {
+			err := clipboard.Copy(text)
+			return clipboardCopiedMsg{text: text, err: err}
+		}
+	}
+	return func() tea.Msg { return runActionMsg{action: a, path: repoPath} }
+}
+
+// findAction returns the action with the given key, if any.
+func findAction(actions []config.Action, key string) (config.Action, bool) {
+	for _, a := range actions {
+		if a.Key == key {
+			return a, true
+		}
+	}
+	return config.Action{}, false
 }

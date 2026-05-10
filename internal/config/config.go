@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,47 @@ type Config struct {
 	Editor           string   `yaml:"editor"`
 	PageSize         int      `yaml:"pageSize,omitempty"`
 	IncludeWorktrees bool     `yaml:"includeWorktrees,omitempty"`
+	Actions          []Action `yaml:"actions,omitempty"`
+}
+
+// Action is a keyboard-driven command bound to a key. Each action runs against
+// the currently selected repo in the TUI. Exactly one of Run or Clipboard
+// must be set:
+//   - Run: shell command executed via tea.ExecProcess (terminal handover).
+//   - Clipboard: text written to the system clipboard, no command launched.
+//
+// `{path}` in either value is substituted with the absolute repo path.
+type Action struct {
+	Key       string `yaml:"key"`
+	Label     string `yaml:"label"`
+	Run       string `yaml:"run,omitempty"`
+	Clipboard string `yaml:"clipboard,omitempty"`
+}
+
+// IsClipboard reports whether the action copies to clipboard rather than
+// launching a process.
+func (a Action) IsClipboard() bool { return a.Clipboard != "" }
+
+// Value returns the template string (either Run or Clipboard).
+func (a Action) Value() string {
+	if a.Clipboard != "" {
+		return a.Clipboard
+	}
+	return a.Run
+}
+
+// DefaultActions returns the built-in action set used when config.yml has no
+// `actions:` block. Uses cfg.Editor for the Enter binding so existing users
+// see no behavioural change.
+func DefaultActions(editor string) []Action {
+	if editor == "" {
+		editor = "code"
+	}
+	return []Action{
+		{Key: "enter", Label: "Open in editor", Run: editor + " {path}"},
+		{Key: "alt+c", Label: "Copy path", Clipboard: "{path}"},
+		{Key: "alt+g", Label: "Open in gitui", Run: "gitui -d {path}"},
+	}
 }
 
 // defaultConfig returns sensible defaults
@@ -70,6 +112,11 @@ func Load(path string) (*Config, error) {
 	// Ensure pageSize has a sensible value
 	if cfg.PageSize <= 0 {
 		cfg.PageSize = 15
+	}
+
+	// Populate defaults when the user hasn't defined any actions yet.
+	if len(cfg.Actions) == 0 {
+		cfg.Actions = DefaultActions(cfg.Editor)
 	}
 
 	return cfg, nil
@@ -152,6 +199,118 @@ func SaveState(path string, s State) error {
 	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("write state: %w", err)
+	}
+	return nil
+}
+
+var validKeyRE = regexp.MustCompile(`^(enter|alt\+[a-z])$`)
+
+// ValidateActions ensures every action has a key/label and exactly one of
+// Run or Clipboard, and that keys are unique and well-formed. Returns the
+// first problem it finds.
+func ValidateActions(actions []Action) error {
+	seen := make(map[string]struct{}, len(actions))
+	for i, a := range actions {
+		if a.Key == "" {
+			return fmt.Errorf("action %d: key is required", i+1)
+		}
+		if !validKeyRE.MatchString(a.Key) {
+			return fmt.Errorf("action %q: key must be 'enter' or 'alt+<letter>'", a.Key)
+		}
+		if _, dup := seen[a.Key]; dup {
+			return fmt.Errorf("action %q: duplicate key", a.Key)
+		}
+		seen[a.Key] = struct{}{}
+		if a.Label == "" {
+			return fmt.Errorf("action %q: label is required", a.Key)
+		}
+		if a.Run == "" && a.Clipboard == "" {
+			return fmt.Errorf("action %q: one of 'run' or 'clipboard' is required", a.Key)
+		}
+		if a.Run != "" && a.Clipboard != "" {
+			return fmt.Errorf("action %q: only one of 'run' or 'clipboard' may be set", a.Key)
+		}
+	}
+	return nil
+}
+
+// WriteActions rewrites just the `actions:` key in config.yml, preserving the
+// rest of the file's content and comments via the yaml.Node AST.
+//
+// If the file doesn't exist yet, a minimal one is created. If `actions:`
+// already exists, its value node is replaced; otherwise it's appended to
+// the root mapping.
+func WriteActions(path string, actions []Action) error {
+	if err := ValidateActions(actions); err != nil {
+		return err
+	}
+
+	var root yaml.Node
+	if data, err := os.ReadFile(path); err == nil {
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parse config for rewrite: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	// yaml.Unmarshal returns a doc node wrapping a mapping. Construct that
+	// scaffold if we're starting from scratch.
+	if root.Kind == 0 {
+		root.Kind = yaml.DocumentNode
+		root.Content = []*yaml.Node{{Kind: yaml.MappingNode}}
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("config root is not a mapping")
+	}
+	mapping := root.Content[0]
+
+	// Encode the new actions list once, take the encoded node.
+	var encoded yaml.Node
+	if err := encoded.Encode(actions); err != nil {
+		return fmt.Errorf("encode actions: %w", err)
+	}
+
+	// Find existing "actions" key/value pair to replace; otherwise append.
+	replaced := false
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == "actions" {
+			mapping.Content[i+1] = &encoded
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "actions"}
+		mapping.Content = append(mapping.Content, keyNode, &encoded)
+	}
+
+	out, err := yaml.Marshal(&root)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".config.yml.*")
+	if err != nil {
+		return fmt.Errorf("temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename temp config: %w", err)
 	}
 	return nil
 }
