@@ -11,6 +11,7 @@ import (
 
 	"github.com/Bharath-code/git-scope/internal/browser"
 	"github.com/Bharath-code/git-scope/internal/config"
+	"github.com/Bharath-code/git-scope/internal/profiling"
 	"github.com/Bharath-code/git-scope/internal/scan"
 	"github.com/Bharath-code/git-scope/internal/tui"
 )
@@ -23,6 +24,9 @@ type options struct {
 	ShowHelp         bool
 	IncludeWorktrees bool
 	WorktreesSet     bool
+	Profile          bool
+	ProfileLog       string
+	ProfilePprof     string
 }
 
 func usage() {
@@ -76,7 +80,21 @@ func main() {
 		return
 	}
 
+	if opts.Profile {
+		logFile := opts.ProfileLog
+		if logFile == "" {
+			logFile = filepath.Join(os.TempDir(), "git-scope-profile.log")
+		}
+		_ = profiling.Enable(logFile, opts.ProfilePprof)
+		fmt.Fprintf(os.Stderr, "profiling: summary will be written to %s\n", logFile)
+		if opts.ProfilePprof != "" {
+			fmt.Fprintf(os.Stderr, "profiling: pprof on http://%s/debug/pprof/\n", opts.ProfilePprof)
+		}
+		defer profiling.WriteSummary()
+	}
+
 	if err := run(cmd, dirs, opts); err != nil {
+		profiling.WriteSummary()
 		log.Fatal(err)
 	}
 }
@@ -100,6 +118,11 @@ func parseFlags() options {
 	var includeWorktrees bool
 	flag.BoolVar(&includeWorktrees, "worktrees", false, "Include linked git worktrees in scan results")
 
+	var profile bool
+	flag.BoolVar(&profile, "profile", false, "Enable timing instrumentation + pprof; writes summary on exit")
+	profileLog := flag.String("profile-log", "", "Path for the profile summary (default: /tmp/git-scope-profile.log)")
+	profilePprof := flag.String("profile-pprof", "localhost:6060", "Address for pprof HTTP server (empty to disable)")
+
 	flag.Parse()
 
 	worktreesSet := false
@@ -115,6 +138,9 @@ func parseFlags() options {
 		ShowHelp:         showHelp,
 		IncludeWorktrees: includeWorktrees,
 		WorktreesSet:     worktreesSet,
+		Profile:          profile,
+		ProfileLog:       *profileLog,
+		ProfilePprof:     *profilePprof,
 	}
 }
 

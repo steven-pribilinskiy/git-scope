@@ -8,14 +8,20 @@ import (
 	"time"
 
 	"github.com/Bharath-code/git-scope/internal/model"
+	"github.com/Bharath-code/git-scope/internal/profiling"
 )
 
 // Status retrieves the git status for a repository at the given path
 func Status(repoPath string) (model.RepoStatus, error) {
 	status := model.RepoStatus{}
 
+	statusStart := time.Now()
 	out, err := runGit(repoPath, "status", "--porcelain=v2", "-b")
+	statusDur := time.Since(statusStart)
 	if err != nil {
+		if profiling.Enabled() {
+			profiling.RecordRepo(repoPath, statusDur, 0)
+		}
 		return status, fmt.Errorf("git status: %w", err)
 	}
 
@@ -36,8 +42,14 @@ func Status(repoPath string) (model.RepoStatus, error) {
 
 	status.IsDirty = status.Staged > 0 || status.Unstaged > 0 || status.Untracked > 0 || status.Ahead > 0 || status.Behind > 0
 
+	logStart := time.Now()
 	if t, err := lastCommitTime(repoPath); err == nil {
 		status.LastCommit = t
+	}
+	logDur := time.Since(logStart)
+
+	if profiling.Enabled() {
+		profiling.RecordRepo(repoPath, statusDur, logDur)
 	}
 
 	return status, nil

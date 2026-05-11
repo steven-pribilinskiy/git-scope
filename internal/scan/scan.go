@@ -13,6 +13,7 @@ import (
 
 	"github.com/Bharath-code/git-scope/internal/gitstatus"
 	"github.com/Bharath-code/git-scope/internal/model"
+	"github.com/Bharath-code/git-scope/internal/profiling"
 )
 
 // smartIgnorePatterns are always-ignored directories for performance
@@ -64,11 +65,18 @@ func ScanRootsWithOptions(roots, ignore []string, includeWorktrees bool) ([]mode
 		ignoreSet[pattern] = struct{}{}
 	}
 
+	defer profiling.Phase("scan.total")()
+
 	// Phase 1: discover repos in parallel by root.
+	discoverDone := profiling.Phase("scan.discover")
 	findings := discoverRepos(roots, ignoreSet, includeWorktrees)
+	discoverDone()
 
 	// Phase 2: resolve git status concurrently across a worker pool.
-	return resolveStatuses(findings), nil
+	resolveDone := profiling.Phase("scan.resolve")
+	repos := resolveStatuses(findings)
+	resolveDone()
+	return repos, nil
 }
 
 // discoverRepos walks each root in parallel and returns repo findings.
@@ -104,6 +112,7 @@ func discoverRepos(roots []string, ignoreSet map[string]struct{}, includeWorktre
 
 // walkRoot walks one root and returns the repos it found.
 func walkRoot(root string, ignoreSet map[string]struct{}, includeWorktrees bool) []repoFinding {
+	defer profiling.Phase("scan.walkRoot:"+root)()
 	var findings []repoFinding
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
