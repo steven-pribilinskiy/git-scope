@@ -175,7 +175,7 @@ func buildRepo(repoPath string, isWorktree bool) model.Repo {
 	}
 	status, serr := gitstatus.Status(repoPath)
 	repo := model.Repo{
-		Name:       filepath.Base(repoPath),
+		Name:       deriveRepoName(repoPath, isWorktree),
 		Path:       repoPath,
 		Status:     status,
 		IsWorktree: isWorktree,
@@ -184,6 +184,27 @@ func buildRepo(repoPath string, isWorktree bool) model.Repo {
 		repo.Status.ScanError = serr.Error()
 	}
 	return repo
+}
+
+// deriveRepoName returns a human-friendly name for a repo path. For regular
+// repos this is just `filepath.Base(repoPath)`. For worktrees laid out under
+// the conventional `<repo>.worktrees/<branch>` sibling-of-repo directory —
+// including branches with slashes that nest like `feat/X` — we return the
+// parent repo's name instead of the basename, which would otherwise be the
+// tail of the branch name and read like a branch in the Repository column.
+func deriveRepoName(repoPath string, isWorktree bool) string {
+	if !isWorktree {
+		return filepath.Base(repoPath)
+	}
+	parts := strings.Split(repoPath, string(filepath.Separator))
+	for _, p := range parts {
+		if strings.HasSuffix(p, ".worktrees") {
+			if name := strings.TrimSuffix(p, ".worktrees"); name != "" {
+				return name
+			}
+		}
+	}
+	return filepath.Base(repoPath)
 }
 
 // isWorktreeGitfile checks whether a .git file is a linked-worktree pointer.
