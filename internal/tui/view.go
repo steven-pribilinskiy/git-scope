@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Bharath-code/git-scope/internal/config"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -27,6 +28,8 @@ func (m Model) renderContent() string {
 		b.WriteString(m.renderWorkspaceModal())
 	case StateWorkspaceEdit:
 		b.WriteString(m.renderWorkspaceEditModal())
+	case StateViewSettings:
+		b.WriteString(m.renderViewSettingsModal())
 	case StateActionMenu:
 		b.WriteString(m.renderActionMenu())
 	case StateActionEdit:
@@ -344,6 +347,7 @@ func (m Model) renderHelp() string {
 			keyBinding("[]", "page"),
 			keyBinding("enter", "run"),
 			keyBinding("?", "actions"),
+			keyBinding("v", "view"),
 			keyBinding("/", "search"),
 			keyBinding("w", "workspace"),
 			keyBinding("W", wtLabel),
@@ -689,4 +693,104 @@ func pad(s string, n int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", n-len(s))
+}
+
+// renderViewSettingsModal renders the `v` modal: sort / filter / layout /
+// last-commit format cycle rows plus per-column toggles.
+func (m Model) renderViewSettingsModal() string {
+	var b strings.Builder
+	b.WriteString(compactLogo())
+	b.WriteString("\n\n")
+
+	title := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#A78BFA")).
+		Bold(true).
+		Render("🛠️  View Settings")
+
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Padding(1, 2).
+		Width(72)
+
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA")).Bold(true)
+	hintStyle := lipgloss.NewStyle().Foreground(mutedColor)
+	selectedRow := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#000000")).
+		Background(lipgloss.Color("#A78BFA")).
+		Bold(true)
+	checkboxOn := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("[✓]")
+	checkboxOff := lipgloss.NewStyle().Foreground(mutedColor).Render("[ ]")
+
+	rows := m.viewSettingsRows()
+	rendered := make([]string, 0, len(rows))
+
+	for i, row := range rows {
+		var text string
+		switch row.kind {
+		case viewRowSort:
+			text = pad(labelStyle.Render("Sort"), 32) + valueStyle.Render("["+m.GetSortModeName()+"]") + hintStyle.Render("   ←/→ cycle")
+		case viewRowFilter:
+			text = pad(labelStyle.Render("Filter"), 32) + valueStyle.Render("["+m.GetFilterModeName()+"]") + hintStyle.Render("   ←/→ cycle")
+		case viewRowLayout:
+			text = pad(labelStyle.Render("Layout"), 32) + valueStyle.Render("["+strings.Title(m.viewLayout)+"]") + hintStyle.Render("   Standard / Compact / Adaptive")
+		case viewRowLastCommit:
+			text = pad(labelStyle.Render("Last commit"), 32) + valueStyle.Render("["+formatLastCommitLabel(m.lastCommitFormat)+"]") + hintStyle.Render("   Date / Date+Year / Ago")
+		case viewRowColumnsHeader:
+			text = labelStyle.Render("Columns")
+		case viewRowColumn:
+			cb := checkboxOn
+			hidden := config.ViewSettings{HiddenColumns: m.hiddenColumns}
+			if hidden.IsColumnHidden(string(row.col.Key)) {
+				cb = checkboxOff
+			}
+			line := "  " + cb + " " + row.col.Title
+			if !row.col.Toggleable {
+				line += "  " + hintStyle.Render("(always on)")
+			}
+			text = line
+		}
+
+		if i == m.viewSettingsCursor && row.kind != viewRowColumnsHeader {
+			text = selectedRow.Render("▸ " + stripStyle(text))
+		} else if row.kind == viewRowColumn {
+			// Column rows get a leading 2-char gap matching the header indent.
+			// Already inserted above; nothing to do.
+		} else if row.kind != viewRowColumnsHeader {
+			text = "  " + text
+		}
+
+		rendered = append(rendered, text)
+	}
+
+	footer := "\n\n" + hintStyle.Render("↑↓ navigate · space cycle/toggle · ←/→ cycle · esc close")
+	body := title + "\n\n" + strings.Join(rendered, "\n") + footer
+	b.WriteString(modalStyle.Render(body))
+	b.WriteString("\n\n")
+	b.WriteString(m.renderHelp())
+	return b.String()
+}
+
+// formatLastCommitLabel converts the persisted format key to a human label.
+func formatLastCommitLabel(f string) string {
+	switch f {
+	case config.LastCommitDateYear:
+		return "Date+Year"
+	case config.LastCommitAgo:
+		return "Ago"
+	default:
+		return "Date"
+	}
+}
+
+// stripStyle is a best-effort fallback used only inside renderViewSettingsModal
+// to apply a row-wide highlight without double-styling. Plain strings (no ANSI)
+// pass through unchanged.
+func stripStyle(s string) string {
+	// lipgloss-rendered strings contain ANSI escape sequences; the row
+	// highlight already applies its own foreground/background, so we
+	// keep the inner text but rely on overwrite for color. Cheap to
+	// return as-is here — terminals overlay the latest style.
+	return s
 }

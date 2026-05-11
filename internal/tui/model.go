@@ -29,6 +29,7 @@ const (
 	StateWorkspaceEdit
 	StateActionMenu
 	StateActionEdit
+	StateViewSettings
 )
 
 // SortMode represents different sorting options
@@ -122,6 +123,12 @@ type Model struct {
 	// Timestamp of the data currently in m.repos when it came from cache.
 	// Used by Init to decide whether to kick off a background refresh.
 	cachedAt time.Time
+	// View settings — what columns appear and how they're formatted.
+	// Loaded from state.View at construction, persisted on every change.
+	viewLayout         string   // "standard" | "compact" | "adaptive"
+	lastCommitFormat   string   // "date" | "date_year" | "ago"
+	hiddenColumns      []string // column keys hidden via the `v` modal
+	viewSettingsCursor int      // row index within the View Settings modal
 	// Action-menu state (StateActionMenu).
 	// actionCursor: index of the highlighted action in cfg.Actions.
 	// confirmDelete: true while a delete is awaiting one-keystroke confirm.
@@ -141,20 +148,11 @@ type Model struct {
 
 // NewModel creates a new TUI model
 func NewModel(cfg *config.Config) Model {
-	columns := []table.Column{
-		{Title: "Status", Width: 8},
-		{Title: "Repository", Width: 18},
-		{Title: "Branch", Width: 14},
-		{Title: "Staged", Width: 6},
-		{Title: "Modified", Width: 8},
-		{Title: "Untracked", Width: 9},
-		{Title: "Ahead", Width: 7},
-		{Title: "Behind", Width: 7},
-		{Title: "Last Commit", Width: 14},
-	}
-
+	// Columns are populated later by applyViewSettings once we've loaded
+	// the user's view preferences. Start with an empty list so the table
+	// model is valid before that point.
 	t := table.New(
-		table.WithColumns(columns),
+		table.WithColumns(nil),
 		table.WithRows([]table.Row{}),
 		table.WithFocused(true),
 		table.WithHeight(12),
@@ -240,10 +238,12 @@ func NewModel(cfg *config.Config) Model {
 	// Workspaces persist across runs in state.json. Mirror them onto the
 	// model and remember which one (if any) is currently driving cfg.Roots
 	// so the picker can highlight it.
-	if st, err := config.LoadState(config.DefaultStatePath()); err == nil {
-		m.workspaces = st.Workspaces
-		m.activeWorkspace = st.ActiveWorkspace
-	}
+	st, _ := config.LoadState(config.DefaultStatePath())
+	m.workspaces = st.Workspaces
+	m.activeWorkspace = st.ActiveWorkspace
+	m.viewLayout = st.View.NormalizedLayout()
+	m.lastCommitFormat = st.View.NormalizedLastCommitFormat()
+	m.hiddenColumns = append([]string(nil), st.View.HiddenColumns...)
 
 	// Capture the YAML config's roots BEFORE any workspace override took
 	// effect in main.go. If no workspace is active, cfg.Roots already are
@@ -253,6 +253,11 @@ func NewModel(cfg *config.Config) Model {
 	} else if fresh, err := config.Load(config.DefaultConfigPath()); err == nil {
 		m.defaultRoots = fresh.Roots
 	}
+
+	// Materialise the table columns from the loaded view settings — must
+	// happen before the synchronous cache load below, which renders rows
+	// against the current column set.
+	m.applyViewSettings()
 
 	// Pre-load the cache synchronously so warm starts boot straight into
 	// the dashboard with no loading flash. The on-disk cache is just a
@@ -375,7 +380,7 @@ func (m *Model) sortRepos() {
 func (m *Model) updateTable() {
 	m.applyFilter()
 	m.sortRepos()
-	m.table.SetRows(reposToRows(m.getCurrentPageRepos()))
+	m.table.SetRows(m.reposToRowsForLayout(m.getCurrentPageRepos()))
 }
 
 // getTotalPages returns the total number of pages
@@ -449,7 +454,10 @@ func (m Model) GetFilterModeName() string {
 	return "All"
 }
 
-// reposToRows converts repos to table rows with status indicators
+// reposToRows is retained as a backstop renderer for tests / external
+// callers that don't carry a Model. Production rendering goes through
+// `Model.reposToRowsForLayout` in columns.go, which honours the user's
+// view settings (layout, last-commit format, hidden columns).
 func reposToRows(repos []model.Repo) []table.Row {
 	rows := make([]table.Row, 0, len(repos))
 	for _, r := range repos {
@@ -521,6 +529,11 @@ func (m *Model) resizeTable() {
 	if h < 5 {
 		h = 5
 	}
-	m.pageSize = h  // Update page size based on new height
-	m.updateTable() // Refresh table to apply new page size
+	m.pageSize = h // Update page size based on new height
+	// Rebuild via applyViewSettings instead of updateTable: under Adaptive,
+	// a width change can flip standard↔compact, so the row width (cells)
+	// must change in lockstep with the column count. updateTable alone
+	// would call SetRows with the new layout's row shape against the old
+	// columns → out-of-range panic in renderRow.
+	m.applyViewSettings()
 }

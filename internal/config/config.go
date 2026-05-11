@@ -182,9 +182,76 @@ func DefaultConfigPath() string {
 // don't belong in the human-edited YAML config (and would clobber its
 // comments on rewrite).
 type State struct {
-	IncludeWorktrees bool        `json:"include_worktrees"`
-	Workspaces       []Workspace `json:"workspaces,omitempty"`
-	ActiveWorkspace  string      `json:"active_workspace,omitempty"`
+	IncludeWorktrees bool         `json:"include_worktrees"`
+	Workspaces       []Workspace  `json:"workspaces,omitempty"`
+	ActiveWorkspace  string       `json:"active_workspace,omitempty"`
+	View             ViewSettings `json:"view,omitempty"`
+}
+
+// ViewSettings holds dashboard appearance preferences chosen via the `v`
+// modal. Stored under state.View so they survive across launches.
+type ViewSettings struct {
+	// Layout selects which set of columns is shown.
+	//   "standard" → full 9 columns
+	//   "compact"  → repo/branch widened, change-counts and ahead/behind
+	//                each collapsed into a single column
+	//   "adaptive" → "standard" normally, "compact" when terminal is
+	//                narrow or a side panel is open
+	Layout string `json:"layout,omitempty"`
+	// LastCommitFormat controls how the last-commit timestamp renders.
+	//   "date"      → "Jan 02 15:04"  (default)
+	//   "date_year" → "2026-01-02 15:04"
+	//   "ago"       → "5 mins ago", "2 days ago", ...
+	LastCommitFormat string `json:"last_commit_format,omitempty"`
+	// HiddenColumns is the set of column keys the user has toggled off.
+	// Keys correspond to entries in the column registry (status, staged,
+	// modified, untracked, ahead, behind, changes, sync, last_commit).
+	// repo / branch are non-toggleable and ignored here.
+	HiddenColumns []string `json:"hidden_columns,omitempty"`
+}
+
+// Layout / format constants — string values match what's persisted in
+// state.json so existing files migrate cleanly when defaults change.
+const (
+	LayoutStandard = "standard"
+	LayoutCompact  = "compact"
+	LayoutAdaptive = "adaptive"
+
+	LastCommitDate     = "date"
+	LastCommitDateYear = "date_year"
+	LastCommitAgo      = "ago"
+)
+
+// NormalizedLayout returns a valid layout string, falling back to
+// LayoutStandard for empty or unknown values.
+func (v ViewSettings) NormalizedLayout() string {
+	switch v.Layout {
+	case LayoutCompact, LayoutAdaptive:
+		return v.Layout
+	default:
+		return LayoutStandard
+	}
+}
+
+// NormalizedLastCommitFormat returns a valid format string, falling back
+// to LastCommitDate for empty or unknown values.
+func (v ViewSettings) NormalizedLastCommitFormat() string {
+	switch v.LastCommitFormat {
+	case LastCommitDateYear, LastCommitAgo:
+		return v.LastCommitFormat
+	default:
+		return LastCommitDate
+	}
+}
+
+// IsColumnHidden reports whether the named column is in the hidden set.
+func (v ViewSettings) IsColumnHidden(key string) bool {
+	for _, h := range v.HiddenColumns {
+		if h == key {
+			return true
+		}
+	}
+	return false
 }
 
 // Workspace is a named collection of scan roots the user can switch between

@@ -119,6 +119,61 @@ func TestSaveLoadState_WorkspacesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveLoadState_ViewSettingsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	in := State{
+		View: ViewSettings{
+			Layout:           "compact",
+			LastCommitFormat: "ago",
+			HiddenColumns:    []string{"ahead", "behind"},
+		},
+	}
+	if err := SaveState(path, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.View.Layout != "compact" || out.View.LastCommitFormat != "ago" {
+		t.Fatalf("view round-trip failed: %+v", out.View)
+	}
+	if len(out.View.HiddenColumns) != 2 {
+		t.Errorf("expected 2 hidden columns, got %d", len(out.View.HiddenColumns))
+	}
+}
+
+func TestViewSettings_Defaults(t *testing.T) {
+	// Empty / unknown values must fall back, not propagate as-is.
+	if v := (ViewSettings{}).NormalizedLayout(); v != LayoutStandard {
+		t.Errorf("default layout = %q, want %q", v, LayoutStandard)
+	}
+	if v := (ViewSettings{Layout: "potato"}).NormalizedLayout(); v != LayoutStandard {
+		t.Errorf("unknown layout = %q, want %q", v, LayoutStandard)
+	}
+	if v := (ViewSettings{Layout: LayoutCompact}).NormalizedLayout(); v != LayoutCompact {
+		t.Errorf("compact layout = %q, want %q", v, LayoutCompact)
+	}
+	if v := (ViewSettings{}).NormalizedLastCommitFormat(); v != LastCommitDate {
+		t.Errorf("default last-commit = %q, want %q", v, LastCommitDate)
+	}
+	if v := (ViewSettings{LastCommitFormat: "weird"}).NormalizedLastCommitFormat(); v != LastCommitDate {
+		t.Errorf("unknown last-commit = %q, want %q", v, LastCommitDate)
+	}
+}
+
+func TestViewSettings_IsColumnHidden(t *testing.T) {
+	v := ViewSettings{HiddenColumns: []string{"ahead", "last_commit"}}
+	if !v.IsColumnHidden("ahead") {
+		t.Error("ahead should be hidden")
+	}
+	if v.IsColumnHidden("staged") {
+		t.Error("staged should not be hidden")
+	}
+}
+
 func TestValidateWorkspace(t *testing.T) {
 	existing := []Workspace{{Label: "A", Paths: []string{"/a"}}}
 	cases := []struct {

@@ -26,6 +26,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// resizeTable internally calls applyViewSettings, which under
+		// Adaptive layout flips standard↔compact in lockstep with the
+		// new row/column shape.
 		m.resizeTable()
 		// Panel renders depend on width/height — rebuild any that have
 		// data so the next View paints at the new size without going
@@ -175,6 +178,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleWorkspaceEditMode(msg)
 		}
 
+		// View Settings modal
+		if m.state == StateViewSettings {
+			return m.handleViewSettingsMode(msg)
+		}
+
 		// Action menu / edit modes.
 		if m.state == StateActionMenu {
 			return m.handleActionMenuMode(msg)
@@ -239,6 +247,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.actionCursor = 0
 				}
 				m.confirmDelete = false
+				return m, nil
+			}
+
+		case "v":
+			// Open the View Settings modal — layout, last-commit format,
+			// per-column toggles. Selections persist to state.json.
+			if m.state == StateReady {
+				m.state = StateViewSettings
+				m.viewSettingsCursor = 0
 				return m, nil
 			}
 
@@ -376,8 +393,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.activePanel = PanelGrass
 					m.statusMsg = "🌿 Loading contribution graph..."
+					m.applyViewSettings()
 					return m, loadGrassDataCmd(m.repos)
 				}
+				m.applyViewSettings()
 				return m, nil
 			}
 
@@ -390,8 +409,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.activePanel = PanelDisk
 					m.statusMsg = "💾 Calculating disk usage..."
+					m.applyViewSettings()
 					return m, loadDiskDataCmd(m.repos)
 				}
+				m.applyViewSettings()
 				return m, nil
 			}
 
@@ -404,8 +425,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.activePanel = PanelTimeline
 					m.statusMsg = "⏰ Loading timeline..."
+					m.applyViewSettings()
 					return m, loadTimelineDataCmd(m.repos)
 				}
+				m.applyViewSettings()
 				return m, nil
 			}
 
@@ -414,6 +437,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel != PanelNone {
 				m.activePanel = PanelNone
 				m.statusMsg = ""
+				m.applyViewSettings()
 				return m, nil
 			}
 
@@ -812,6 +836,178 @@ func persistActiveWorkspace(active string) {
 	}
 	st.ActiveWorkspace = active
 	_ = config.SaveState(config.DefaultStatePath(), st)
+}
+
+// viewSettingsRows is the ordered list of rows the View Settings modal
+// renders. Used by both the renderer and the handler so the cursor index
+// agrees with the on-screen position. Column rows are filtered to the
+// currently-effective layout so toggling Standard ↔ Compact swaps the
+// per-column toggles in real time.
+type viewSettingsRow struct {
+	kind viewSettingsRowKind
+	col  colDef // populated when kind == viewRowColumn
+}
+
+type viewSettingsRowKind int
+
+const (
+	viewRowSort viewSettingsRowKind = iota
+	viewRowFilter
+	viewRowLayout
+	viewRowLastCommit
+	viewRowColumnsHeader
+	viewRowColumn
+)
+
+func (m Model) viewSettingsRows() []viewSettingsRow {
+	rows := []viewSettingsRow{
+		{kind: viewRowSort},
+		{kind: viewRowFilter},
+		{kind: viewRowLayout},
+		{kind: viewRowLastCommit},
+		{kind: viewRowColumnsHeader},
+	}
+	// Use the effective layout's column set so the visible toggles match
+	// what the user is seeing on screen. Non-toggleable columns (repo,
+	// branch) appear as informational rows.
+	var base []colDef
+	if m.effectiveLayout() == config.LayoutCompact {
+		base = compactLayoutCols()
+	} else {
+		base = standardLayoutCols()
+	}
+	for _, c := range base {
+		rows = append(rows, viewSettingsRow{kind: viewRowColumn, col: c})
+	}
+	return rows
+}
+
+// handleViewSettingsMode dispatches keys while the View Settings modal
+// is open. Every change persists to state.json and immediately rebuilds
+// the table so feedback is live.
+func (m Model) handleViewSettingsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	rows := m.viewSettingsRows()
+	key := msg.String()
+
+	switch key {
+	case "esc", "q":
+		m.state = StateReady
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	case "up", "k":
+		// Skip rows that aren't actionable (the "Columns" header).
+		for m.viewSettingsCursor > 0 {
+			m.viewSettingsCursor--
+			if rows[m.viewSettingsCursor].kind != viewRowColumnsHeader {
+				break
+			}
+		}
+		return m, nil
+	case "down", "j":
+		for m.viewSettingsCursor < len(rows)-1 {
+			m.viewSettingsCursor++
+			if rows[m.viewSettingsCursor].kind != viewRowColumnsHeader {
+				break
+			}
+		}
+		return m, nil
+	}
+
+	if m.viewSettingsCursor >= len(rows) {
+		return m, nil
+	}
+	row := rows[m.viewSettingsCursor]
+
+	// Space / Enter activates the focused row. The cycle-rows advance to
+	// the next value; column-rows flip the visible/hidden bit.
+	if key == " " || key == "enter" || key == "right" || key == "l" {
+		return m.applyViewSettingsCycle(row, +1)
+	}
+	if key == "left" || key == "h" {
+		return m.applyViewSettingsCycle(row, -1)
+	}
+
+	return m, nil
+}
+
+// applyViewSettingsCycle advances (delta=+1) or reverses (delta=-1) the
+// focused row's value, then persists and rebuilds.
+func (m Model) applyViewSettingsCycle(row viewSettingsRow, delta int) (Model, tea.Cmd) {
+	switch row.kind {
+	case viewRowSort:
+		m.sortMode = SortMode((int(m.sortMode) + delta + 4) % 4)
+		m.resetPage()
+	case viewRowFilter:
+		m.filterMode = FilterMode((int(m.filterMode) + delta + 3) % 3)
+		m.resetPage()
+	case viewRowLayout:
+		layouts := []string{config.LayoutStandard, config.LayoutCompact, config.LayoutAdaptive}
+		current := indexOf(layouts, m.viewLayout)
+		m.viewLayout = layouts[(current+delta+len(layouts))%len(layouts)]
+	case viewRowLastCommit:
+		formats := []string{config.LastCommitDate, config.LastCommitDateYear, config.LastCommitAgo}
+		current := indexOf(formats, m.lastCommitFormat)
+		m.lastCommitFormat = formats[(current+delta+len(formats))%len(formats)]
+	case viewRowColumn:
+		if !row.col.Toggleable {
+			return m, nil
+		}
+		key := string(row.col.Key)
+		if containsString(m.hiddenColumns, key) {
+			m.hiddenColumns = removeString(m.hiddenColumns, key)
+		} else {
+			m.hiddenColumns = append(m.hiddenColumns, key)
+		}
+	default:
+		return m, nil
+	}
+	m.applyViewSettings()
+	m.persistViewSettings()
+	return m, nil
+}
+
+// persistViewSettings writes the current view block back to state.json,
+// preserving the other state fields (workspaces, worktree toggle, etc.).
+func (m Model) persistViewSettings() {
+	st, err := config.LoadState(config.DefaultStatePath())
+	if err != nil {
+		st = config.State{}
+	}
+	st.View = config.ViewSettings{
+		Layout:           m.viewLayout,
+		LastCommitFormat: m.lastCommitFormat,
+		HiddenColumns:    append([]string(nil), m.hiddenColumns...),
+	}
+	_ = config.SaveState(config.DefaultStatePath(), st)
+}
+
+func indexOf(slice []string, v string) int {
+	for i, s := range slice {
+		if s == v {
+			return i
+		}
+	}
+	return 0
+}
+
+func containsString(slice []string, v string) bool {
+	for _, s := range slice {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(slice []string, v string) []string {
+	out := slice[:0]
+	for _, s := range slice {
+		if s != v {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // openBrowserCmd opens a URL in the default browser

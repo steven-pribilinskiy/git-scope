@@ -52,7 +52,7 @@ func GetTimeline(repos []model.Repo) (*TimelineData, error) {
 			Branch:     repo.Status.Branch,
 			LastCommit: lastCommit,
 			Message:    message,
-			TimeAgo:    formatTimeAgo(lastCommit, now),
+			TimeAgo:    FormatTimeAgo(lastCommit, now),
 			DayLabel:   formatDayLabel(lastCommit, today),
 		}
 
@@ -82,8 +82,9 @@ func getLastCommitMessage(repoPath string) string {
 	return msg
 }
 
-// formatTimeAgo formats a time as "2 hours ago", "3 days ago", etc.
-func formatTimeAgo(t time.Time, now time.Time) string {
+// FormatTimeAgo formats a time as "2 hours ago", "3 days ago", "5 months
+// ago", etc. Scales up to years; never falls back to a bare date.
+func FormatTimeAgo(t time.Time, now time.Time) string {
 	diff := now.Sub(t)
 
 	switch {
@@ -113,8 +114,18 @@ func formatTimeAgo(t time.Time, now time.Time) string {
 			return "1 week ago"
 		}
 		return formatInt(int64(weeks)) + " weeks ago"
+	case diff < 365*24*time.Hour:
+		months := int(diff.Hours() / 24 / 30)
+		if months <= 1 {
+			return "1 month ago"
+		}
+		return formatInt(int64(months)) + " months ago"
 	default:
-		return t.Format("Jan 2")
+		years := int(diff.Hours() / 24 / 365)
+		if years <= 1 {
+			return "1 year ago"
+		}
+		return formatInt(int64(years)) + " years ago"
 	}
 }
 
