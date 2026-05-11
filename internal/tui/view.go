@@ -25,6 +25,8 @@ func (m Model) renderContent() string {
 		b.WriteString(m.renderDashboard())
 	case StateWorkspaceSwitch:
 		b.WriteString(m.renderWorkspaceModal())
+	case StateWorkspaceEdit:
+		b.WriteString(m.renderWorkspaceEditModal())
 	case StateActionMenu:
 		b.WriteString(m.renderActionMenu())
 	case StateActionEdit:
@@ -363,53 +365,133 @@ func keyBinding(key, action string) string {
 	return keyBindingKeyStyle.Render(key) + " " + action
 }
 
-// renderWorkspaceModal renders the workspace switch modal
+// renderWorkspaceModal renders the saved-workspaces picker.
+//
+// Row 0 is the implicit "Default (config.yml roots)"; rows 1..N are the
+// user's saved workspaces. The current active one (or Default) starts
+// highlighted under the cursor.
 func (m Model) renderWorkspaceModal() string {
 	var b strings.Builder
-
-	// Header with logo
 	b.WriteString(compactLogo())
 	b.WriteString("\n\n")
 
-	// Modal box
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#7C3AED")).
 		Padding(1, 2).
-		Width(50)
+		Width(72)
 
-	// Modal title
 	title := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#A78BFA")).
 		Bold(true).
-		Render("📁 Switch Workspace")
+		Render("📁 Workspaces")
 
-	// Path input
-	label := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true).
-		Render("Path: ")
+	rowLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	rowPath := lipgloss.NewStyle().Foreground(mutedColor)
+	activeMark := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("●")
+	selectedRow := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#000000")).
+		Background(lipgloss.Color("#A78BFA")).
+		Bold(true)
 
-	// Error message if any
-	errorLine := ""
-	if m.workspaceError != "" {
-		errorLine = "\n" + lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#EF4444")).
-			Render("❌ "+m.workspaceError)
+	// Build rows: 0 = Default, 1..N = saved workspaces.
+	type wsRow struct {
+		label string
+		paths string
+		active bool
+	}
+	rows := make([]wsRow, 0, m.workspaceRowCount())
+	rows = append(rows, wsRow{
+		label:  "Default (config.yml roots)",
+		paths:  strings.Join(m.defaultRoots, ", "),
+		active: m.activeWorkspace == "",
+	})
+	for _, w := range m.workspaces {
+		rows = append(rows, wsRow{
+			label:  w.Label,
+			paths:  strings.Join(w.Paths, ", "),
+			active: w.Label == m.activeWorkspace,
+		})
 	}
 
-	// Footer hints
-	footer := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Render("\n\nTab = complete   Enter = scan   Esc = cancel")
+	var rendered []string
+	for i, r := range rows {
+		mark := "  "
+		if r.active {
+			mark = activeMark + " "
+		}
+		labelCell := pad(truncateString(r.label, 24), 26)
+		pathCell := truncateString(r.paths, 40)
+		line := mark + rowLabel.Render(labelCell) + "  " + rowPath.Render(pathCell)
+		if i == m.workspaceCursor {
+			cursor := "▸ "
+			line = selectedRow.Render(cursor + labelCell + "  " + pathCell)
+		} else {
+			line = "  " + line
+		}
+		rendered = append(rendered, line)
+	}
 
-	modalContent := title + "\n\n" + label + m.workspaceInput.View() + errorLine + footer
-	b.WriteString(modalStyle.Render(modalContent))
+	hints := "↑↓ select · enter switch · a add · e edit · d delete · esc close"
+	if m.workspaceConfirmDelete {
+		hints = "Delete this workspace? Press 'y' to confirm, any other key to cancel."
+	}
+	footer := "\n\n" + lipgloss.NewStyle().Foreground(mutedColor).Render(hints)
+	if m.workspaceConfirmDelete {
+		footer = "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#F59E0B")).Render(hints)
+	}
 
-	// Help bar
+	body := title + "\n\n" + strings.Join(rendered, "\n") + footer
+	b.WriteString(modalStyle.Render(body))
+
 	b.WriteString("\n\n")
 	b.WriteString(m.renderHelp())
+	return b.String()
+}
 
+// renderWorkspaceEditModal renders the add/edit form for a workspace.
+func (m Model) renderWorkspaceEditModal() string {
+	var b strings.Builder
+	b.WriteString(compactLogo())
+	b.WriteString("\n\n")
+
+	title := "📁 New Workspace"
+	if m.workspaceEditIndex >= 0 {
+		title = "✏️  Edit Workspace"
+	}
+	titleStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA")).Bold(true).Render(title)
+
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Padding(1, 2).
+		Width(80)
+
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	focus := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("▸ ")
+	pad := "  "
+
+	lineLabel := pad + labelStyle.Render("Label: ") + m.workspaceLabelInput.View()
+	linePaths := pad + labelStyle.Render("Paths: ") + m.workspacePathsInput.View()
+	hint := lipgloss.NewStyle().Foreground(mutedColor).Render("    (comma-separated, ~ expanded)")
+
+	if m.workspaceEditField == 0 {
+		lineLabel = focus + lineLabel[len(pad):]
+	} else {
+		linePaths = focus + linePaths[len(pad):]
+	}
+
+	errLine := ""
+	if m.workspaceEditErr != "" {
+		errLine = "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Render("❌ "+m.workspaceEditErr)
+	}
+
+	footer := "\n\n" + lipgloss.NewStyle().Foreground(mutedColor).Render("tab field · enter save · esc cancel")
+
+	body := titleStyled + "\n\n" + lineLabel + "\n" + linePaths + "\n" + hint + errLine + footer
+	b.WriteString(modalStyle.Render(body))
+	b.WriteString("\n\n")
+	b.WriteString(m.renderHelp())
 	return b.String()
 }
 

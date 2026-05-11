@@ -182,7 +182,55 @@ func DefaultConfigPath() string {
 // don't belong in the human-edited YAML config (and would clobber its
 // comments on rewrite).
 type State struct {
-	IncludeWorktrees bool `json:"include_worktrees"`
+	IncludeWorktrees bool        `json:"include_worktrees"`
+	Workspaces       []Workspace `json:"workspaces,omitempty"`
+	ActiveWorkspace  string      `json:"active_workspace,omitempty"`
+}
+
+// Workspace is a named collection of scan roots the user can switch between
+// from inside the TUI. Saved workspaces persist across runs; the active one
+// (if any) overrides cfg.Roots at launch so git-scope boots into the same
+// view the user last switched to.
+type Workspace struct {
+	Label string   `json:"label"`
+	Paths []string `json:"paths"`
+}
+
+// FindWorkspace returns the workspace with the given label, if any.
+func (s State) FindWorkspace(label string) (Workspace, bool) {
+	for _, w := range s.Workspaces {
+		if w.Label == label {
+			return w, true
+		}
+	}
+	return Workspace{}, false
+}
+
+// ValidateWorkspace ensures a workspace has a non-empty label and at least
+// one non-empty path. It does NOT check whether paths exist on disk —
+// that's the caller's responsibility (typically via
+// workspace.NormalizeWorkspacePath).
+func ValidateWorkspace(w Workspace, existing []Workspace, editingIndex int) error {
+	if strings.TrimSpace(w.Label) == "" {
+		return fmt.Errorf("label is required")
+	}
+	if len(w.Paths) == 0 {
+		return fmt.Errorf("at least one path is required")
+	}
+	for i, p := range w.Paths {
+		if strings.TrimSpace(p) == "" {
+			return fmt.Errorf("path %d is empty", i+1)
+		}
+	}
+	for i, other := range existing {
+		if i == editingIndex {
+			continue
+		}
+		if other.Label == w.Label {
+			return fmt.Errorf("a workspace named %q already exists", w.Label)
+		}
+	}
+	return nil
 }
 
 // DefaultStatePath returns the default location for the state file.

@@ -26,6 +26,7 @@ const (
 	StateError
 	StateSearching
 	StateWorkspaceSwitch
+	StateWorkspaceEdit
 	StateActionMenu
 	StateActionEdit
 )
@@ -79,10 +80,29 @@ type Model struct {
 	grassRendered    string
 	diskRendered     string
 	timelineRendered string
-	// Workspace switch state
-	workspaceInput  textinput.Model
-	workspaceError  string
-	activeWorkspace string
+	// Workspace switch state — list/CRUD modal opened with `w`.
+	// workspaces: in-memory mirror of state.Workspaces. The implicit
+	//   "Default" entry (cfg.Roots) is row 0 and isn't in this slice.
+	// activeWorkspace: label of the workspace whose paths are currently
+	//   driving cfg.Roots, or "" when the Default is active.
+	// workspaceCursor: highlighted row in the modal (0 = Default).
+	// workspaceConfirmDelete: pending delete awaiting one-keystroke confirm.
+	// Edit-form fields (used only in StateWorkspaceEdit):
+	workspaces             []config.Workspace
+	activeWorkspace        string
+	// defaultRoots is the workspace-independent set of scan roots loaded
+	// directly from config.yml. When a workspace is active, cfg.Roots
+	// holds the workspace's paths instead; this slice survives so the
+	// picker can show the user what "Default" maps to and so we can
+	// restore it without re-reading the file every time.
+	defaultRoots []string
+	workspaceCursor        int
+	workspaceConfirmDelete bool
+	workspaceEditIndex     int // -1 = adding a new one
+	workspaceEditField     int // 0 = label, 1 = paths
+	workspaceLabelInput    textinput.Model
+	workspacePathsInput    textinput.Model
+	workspaceEditErr       string
 	// Star nudge state
 	showStarNudge         bool
 	nudgeShownThisSession bool
@@ -168,11 +188,15 @@ func NewModel(cfg *config.Config) Model {
 	ti.CharLimit = 50
 	ti.Width = 30
 
-	// Create text input for workspace switch
-	wi := textinput.New()
-	wi.Placeholder = "~/projects or /path/to/dir"
-	wi.CharLimit = 200
-	wi.Width = 40
+	// Inputs for the workspace edit modal (label + comma-separated paths).
+	wlabel := textinput.New()
+	wlabel.Placeholder = "Cloudbeds tools"
+	wlabel.CharLimit = 60
+	wlabel.Width = 40
+	wpaths := textinput.New()
+	wpaths.Placeholder = "~/projects/foo, ~/projects/bar"
+	wpaths.CharLimit = 400
+	wpaths.Width = 60
 
 	// Text inputs for action-edit modal.
 	akey := textinput.New()
@@ -194,21 +218,40 @@ func NewModel(cfg *config.Config) Model {
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
 
 	m := Model{
-		cfg:              cfg,
-		table:            t,
-		textInput:        ti,
-		workspaceInput:   wi,
-		spinner:          sp,
-		state:            StateLoading,
-		sortMode:         SortByDirty,
-		filterMode:       FilterAll,
-		currentPage:      0,
-		pageSize:         cfg.PageSize,
-		includeWorktrees: cfg.IncludeWorktrees,
-		actionKeyInput:   akey,
-		actionLabelIn:    alabel,
-		actionValueIn:    avalue,
-		actionEditIndex:  -1,
+		cfg:                 cfg,
+		table:               t,
+		textInput:           ti,
+		workspaceLabelInput: wlabel,
+		workspacePathsInput: wpaths,
+		spinner:             sp,
+		state:               StateLoading,
+		sortMode:            SortByDirty,
+		filterMode:          FilterAll,
+		currentPage:         0,
+		pageSize:            cfg.PageSize,
+		includeWorktrees:    cfg.IncludeWorktrees,
+		actionKeyInput:      akey,
+		actionLabelIn:       alabel,
+		actionValueIn:       avalue,
+		actionEditIndex:     -1,
+		workspaceEditIndex:  -1,
+	}
+
+	// Workspaces persist across runs in state.json. Mirror them onto the
+	// model and remember which one (if any) is currently driving cfg.Roots
+	// so the picker can highlight it.
+	if st, err := config.LoadState(config.DefaultStatePath()); err == nil {
+		m.workspaces = st.Workspaces
+		m.activeWorkspace = st.ActiveWorkspace
+	}
+
+	// Capture the YAML config's roots BEFORE any workspace override took
+	// effect in main.go. If no workspace is active, cfg.Roots already are
+	// them; otherwise we re-read the file (fast, cached by the kernel).
+	if m.activeWorkspace == "" {
+		m.defaultRoots = append([]string(nil), cfg.Roots...)
+	} else if fresh, err := config.Load(config.DefaultConfigPath()); err == nil {
+		m.defaultRoots = fresh.Roots
 	}
 
 	// Pre-load the cache synchronously so warm starts boot straight into

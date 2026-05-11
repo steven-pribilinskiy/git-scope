@@ -9,7 +9,6 @@ import (
 	"github.com/Bharath-code/git-scope/internal/config"
 	"github.com/Bharath-code/git-scope/internal/model"
 	"github.com/Bharath-code/git-scope/internal/nudge"
-	"github.com/Bharath-code/git-scope/internal/scan"
 	"github.com/Bharath-code/git-scope/internal/stats"
 	"github.com/Bharath-code/git-scope/internal/workspace"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -97,32 +96,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, nil
 
-	case workspaceScanCompleteMsg:
-		m.repos = msg.repos
-		m.state = StateReady
-		m.resetPage()
-		m.updateTable()
-
-		// Show helpful message about switched workspace
-		if len(msg.repos) == 0 {
-			m.statusMsg = fmt.Sprintf("⚠️  No git repos found in %s", msg.workspacePath)
-		} else {
-			m.statusMsg = fmt.Sprintf("✓ Switched to %s (%d repos)", msg.workspacePath, len(msg.repos))
-
-			// Trigger star nudge after successful workspace switch
-			if nudge.ShouldShowNudge() && !m.nudgeShownThisSession {
-				m.showStarNudge = true
-				m.nudgeShownThisSession = true
-				nudge.MarkShown()
-			}
-		}
-		return m, nil
-
-	case workspaceScanErrorMsg:
-		m.state = StateError
-		m.err = msg.err
-		return m, nil
-
 	case runActionMsg:
 		// Substitute {path} and parse the command into argv.
 		cmdLine := strings.ReplaceAll(msg.action.Run, "{path}", msg.path)
@@ -194,9 +167,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleSearchMode(msg)
 		}
 
-		// Handle workspace switch mode
+		// Handle workspace picker + add/edit form
 		if m.state == StateWorkspaceSwitch {
 			return m.handleWorkspaceSwitchMode(msg)
+		}
+		if m.state == StateWorkspaceEdit {
+			return m.handleWorkspaceEditMode(msg)
 		}
 
 		// Action menu / edit modes.
@@ -442,13 +418,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "w":
-			// Open workspace switch modal
+			// Open the saved-workspaces picker. The list shows an
+			// implicit "Default (config.yml roots)" row at index 0 plus
+			// every saved workspace; the active one (if any) starts under
+			// the cursor.
 			if m.state == StateReady {
 				m.state = StateWorkspaceSwitch
-				m.workspaceInput.SetValue("")
-				m.workspaceInput.Focus()
-				m.workspaceError = ""
-				return m, textinput.Blink
+				m.workspaceConfirmDelete = false
+				m.workspaceCursor = m.activeWorkspaceCursor()
+				return m, nil
 			}
 
 		case "[":
@@ -562,93 +540,278 @@ func loadTimelineDataCmd(repos []model.Repo) tea.Cmd {
 	}
 }
 
-// handleWorkspaceSwitchMode handles key events when in workspace switch mode
+// workspaceRowCount returns the number of rows the picker should display:
+// the implicit "Default" row plus one row per saved workspace.
+func (m Model) workspaceRowCount() int { return 1 + len(m.workspaces) }
+
+// activeWorkspaceCursor returns the row index of the currently active
+// workspace, or 0 (Default) when none is active.
+func (m Model) activeWorkspaceCursor() int {
+	if m.activeWorkspace == "" {
+		return 0
+	}
+	for i, w := range m.workspaces {
+		if w.Label == m.activeWorkspace {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// handleWorkspaceSwitchMode dispatches keys while the workspace picker is
+// open. The row at index 0 is the implicit "Default (config.yml roots)";
+// rows 1..N are the saved workspaces.
 func (m Model) handleWorkspaceSwitchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		// Cancel workspace switch
+	key := msg.String()
+
+	if m.workspaceConfirmDelete {
+		m.workspaceConfirmDelete = false
+		if key == "y" || key == "Y" {
+			return m.deleteSelectedWorkspace()
+		}
+		// Any other key cancels the confirm; fall through.
+	}
+
+	switch key {
+	case "esc", "q":
 		m.state = StateReady
-		m.workspaceInput.Blur()
-		m.workspaceError = ""
+		m.statusMsg = ""
 		return m, nil
-
+	case "up", "k":
+		if m.workspaceCursor > 0 {
+			m.workspaceCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.workspaceCursor < m.workspaceRowCount()-1 {
+			m.workspaceCursor++
+		}
+		return m, nil
 	case "enter":
-		// Validate and switch workspace
-		inputPath := m.workspaceInput.Value()
-		if inputPath == "" {
-			m.workspaceError = "Please enter a path"
-			return m, nil
-		}
-
-		// Normalize the path (expand ~, resolve symlinks, validate)
-		normalizedPath, err := workspace.NormalizeWorkspacePath(inputPath)
-		if err != nil {
-			m.workspaceError = err.Error()
-			return m, nil
-		}
-
-		// Switch to loading state and scan the new workspace
-		m.state = StateLoading
-		m.workspaceInput.Blur()
-		m.workspaceError = ""
-		m.activeWorkspace = normalizedPath
-		m.statusMsg = "🔄 Switching to " + normalizedPath + "..."
-
-		return m, scanWorkspaceCmd(normalizedPath, m.cfg.Ignore)
-
-	case "tab":
-		// Tab completion for directory paths
-		currentPath := m.workspaceInput.Value()
-		if currentPath != "" {
-			completedPath := workspace.CompleteDirectoryPath(currentPath)
-			if completedPath != currentPath {
-				m.workspaceInput.SetValue(completedPath)
-				// Move cursor to end
-				m.workspaceInput.CursorEnd()
-			}
+		return m.switchToSelectedWorkspace()
+	case "a":
+		m.openWorkspaceEdit(-1)
+		return m, textinput.Blink
+	case "e":
+		// Default row isn't editable.
+		if m.workspaceCursor > 0 {
+			m.openWorkspaceEdit(m.workspaceCursor - 1)
+			return m, textinput.Blink
 		}
 		return m, nil
-
+	case "d":
+		if m.workspaceCursor > 0 {
+			m.workspaceConfirmDelete = true
+		}
+		return m, nil
 	case "ctrl+c":
 		return m, tea.Quit
 	}
+	return m, nil
+}
 
-	// Update text input
-	var cmd tea.Cmd
-	m.workspaceInput, cmd = m.workspaceInput.Update(msg)
+// switchToSelectedWorkspace applies the cursor row to cfg.Roots, persists
+// the choice as active, and kicks off a refresh. Default row clears the
+// active workspace and restores cfg.Roots from the YAML config.
+func (m Model) switchToSelectedWorkspace() (Model, tea.Cmd) {
+	var newRoots []string
+	var newActive string
 
-	// Clear error when typing
-	if m.workspaceError != "" {
-		m.workspaceError = ""
+	if m.workspaceCursor == 0 {
+		if len(m.defaultRoots) == 0 {
+			m.statusMsg = "❌ Default roots not available"
+			return m, nil
+		}
+		newRoots = append([]string(nil), m.defaultRoots...)
+		newActive = ""
+	} else {
+		ws := m.workspaces[m.workspaceCursor-1]
+		paths := make([]string, 0, len(ws.Paths))
+		for _, p := range ws.Paths {
+			norm, err := workspace.NormalizeWorkspacePath(p)
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("❌ %s: %s", p, err.Error())
+				return m, nil
+			}
+			paths = append(paths, norm)
+		}
+		newRoots = paths
+		newActive = ws.Label
 	}
 
+	m.cfg.Roots = newRoots
+	m.activeWorkspace = newActive
+	m.repos = nil
+	m.lastScanIncludesWorktrees = false
+	m.refreshing = true
+	m.state = StateLoading
+	if newActive == "" {
+		m.statusMsg = "↻ Switching to Default…"
+	} else {
+		m.statusMsg = "↻ Switching to " + newActive + "…"
+	}
+
+	// Persist active workspace so the next launch boots into the same view.
+	persistActiveWorkspace(newActive)
+
+	return m, refreshScanCmd(m.cfg, m.includeWorktrees)
+}
+
+// deleteSelectedWorkspace removes the workspace under the cursor, rewrites
+// state.json, and adjusts state/cursor accordingly. If the deleted entry
+// was active, we fall back to Default but DON'T auto-switch the dashboard.
+func (m Model) deleteSelectedWorkspace() (Model, tea.Cmd) {
+	idx := m.workspaceCursor - 1
+	if idx < 0 || idx >= len(m.workspaces) {
+		return m, nil
+	}
+	deleted := m.workspaces[idx]
+	m.workspaces = append(m.workspaces[:idx], m.workspaces[idx+1:]...)
+	if m.activeWorkspace == deleted.Label {
+		m.activeWorkspace = ""
+	}
+	if m.workspaceCursor >= m.workspaceRowCount() {
+		m.workspaceCursor = m.workspaceRowCount() - 1
+	}
+	if err := persistWorkspaces(m.workspaces, m.activeWorkspace, m.includeWorktrees); err != nil {
+		m.statusMsg = "❌ Save failed: " + err.Error()
+	} else {
+		m.statusMsg = "Removed workspace " + deleted.Label
+	}
+	return m, nil
+}
+
+// openWorkspaceEdit puts the modal in edit mode for the given index. Pass
+// -1 to add a new workspace.
+func (m *Model) openWorkspaceEdit(idx int) {
+	m.state = StateWorkspaceEdit
+	m.workspaceEditIndex = idx
+	m.workspaceEditField = 0
+	m.workspaceEditErr = ""
+	if idx >= 0 && idx < len(m.workspaces) {
+		m.workspaceLabelInput.SetValue(m.workspaces[idx].Label)
+		m.workspacePathsInput.SetValue(strings.Join(m.workspaces[idx].Paths, ", "))
+	} else {
+		m.workspaceLabelInput.SetValue("")
+		m.workspacePathsInput.SetValue("")
+	}
+	m.workspaceLabelInput.Focus()
+	m.workspacePathsInput.Blur()
+}
+
+// handleWorkspaceEditMode owns key events while the add/edit form is open.
+func (m Model) handleWorkspaceEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.state = StateWorkspaceSwitch
+		m.workspaceEditErr = ""
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	case "tab":
+		m.workspaceEditField = (m.workspaceEditField + 1) % 2
+		m.focusWorkspaceEditField()
+		return m, nil
+	case "shift+tab":
+		m.workspaceEditField = (m.workspaceEditField + 1) % 2
+		m.focusWorkspaceEditField()
+		return m, nil
+	case "enter":
+		return m.saveWorkspaceEdit()
+	}
+
+	var cmd tea.Cmd
+	switch m.workspaceEditField {
+	case 0:
+		m.workspaceLabelInput, cmd = m.workspaceLabelInput.Update(msg)
+	case 1:
+		m.workspacePathsInput, cmd = m.workspacePathsInput.Update(msg)
+	}
+	if m.workspaceEditErr != "" {
+		m.workspaceEditErr = ""
+	}
 	return m, cmd
 }
 
-// workspaceScanCompleteMsg is sent when workspace scanning is complete
-type workspaceScanCompleteMsg struct {
-	repos         []model.Repo
-	workspacePath string
+func (m *Model) focusWorkspaceEditField() {
+	m.workspaceLabelInput.Blur()
+	m.workspacePathsInput.Blur()
+	if m.workspaceEditField == 0 {
+		m.workspaceLabelInput.Focus()
+	} else {
+		m.workspacePathsInput.Focus()
+	}
 }
 
-// workspaceScanErrorMsg is sent when workspace scanning fails
-type workspaceScanErrorMsg struct {
-	err error
-}
-
-// scanWorkspaceCmd scans a single workspace path for repositories
-func scanWorkspaceCmd(workspacePath string, ignore []string) tea.Cmd {
-	return func() tea.Msg {
-		repos, err := scan.ScanRoots([]string{workspacePath}, ignore)
-		if err != nil {
-			return workspaceScanErrorMsg{err: err}
+// saveWorkspaceEdit validates the form buffer, writes it to cfg.Workspaces
+// (in-memory) and to state.json, then drops back to the picker.
+func (m Model) saveWorkspaceEdit() (Model, tea.Cmd) {
+	label := strings.TrimSpace(m.workspaceLabelInput.Value())
+	raw := m.workspacePathsInput.Value()
+	parts := strings.Split(raw, ",")
+	paths := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
 		}
-
-		return workspaceScanCompleteMsg{
-			repos:         repos,
-			workspacePath: workspacePath,
+		paths = append(paths, p)
+	}
+	candidate := config.Workspace{Label: label, Paths: paths}
+	if err := config.ValidateWorkspace(candidate, m.workspaces, m.workspaceEditIndex); err != nil {
+		m.workspaceEditErr = err.Error()
+		return m, nil
+	}
+	// Validate paths exist — this catches typos before they cost a cold scan.
+	for _, p := range paths {
+		if _, err := workspace.NormalizeWorkspacePath(p); err != nil {
+			m.workspaceEditErr = fmt.Sprintf("%s: %s", p, err.Error())
+			return m, nil
 		}
 	}
+
+	if m.workspaceEditIndex >= 0 && m.workspaceEditIndex < len(m.workspaces) {
+		// Editing existing — if the label changed and this entry was
+		// active, update the activeWorkspace pointer too.
+		oldLabel := m.workspaces[m.workspaceEditIndex].Label
+		m.workspaces[m.workspaceEditIndex] = candidate
+		if m.activeWorkspace == oldLabel {
+			m.activeWorkspace = candidate.Label
+		}
+	} else {
+		m.workspaces = append(m.workspaces, candidate)
+		m.workspaceCursor = len(m.workspaces) // 1-indexed (Default at 0)
+	}
+
+	if err := persistWorkspaces(m.workspaces, m.activeWorkspace, m.includeWorktrees); err != nil {
+		m.workspaceEditErr = "Save failed: " + err.Error()
+		return m, nil
+	}
+
+	m.state = StateWorkspaceSwitch
+	m.statusMsg = "Saved workspace " + candidate.Label
+	return m, nil
+}
+
+// persistWorkspaces rewrites state.json with the current workspace list,
+// preserving the worktree toggle.
+func persistWorkspaces(workspaces []config.Workspace, active string, includeWorktrees bool) error {
+	return config.SaveState(config.DefaultStatePath(), config.State{
+		IncludeWorktrees: includeWorktrees,
+		Workspaces:       workspaces,
+		ActiveWorkspace:  active,
+	})
+}
+
+// persistActiveWorkspace updates only the active-workspace pointer in
+// state.json. Used when switching from the picker without editing the list.
+func persistActiveWorkspace(active string) {
+	st, err := config.LoadState(config.DefaultStatePath())
+	if err != nil {
+		st = config.State{}
+	}
+	st.ActiveWorkspace = active
+	_ = config.SaveState(config.DefaultStatePath(), st)
 }
 
 // openBrowserCmd opens a URL in the default browser

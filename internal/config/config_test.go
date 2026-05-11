@@ -89,6 +89,61 @@ func TestWriteActions_AppendsWhenAbsent(t *testing.T) {
 	}
 }
 
+func TestSaveLoadState_WorkspacesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	in := State{
+		IncludeWorktrees: true,
+		Workspaces: []Workspace{
+			{Label: "Cloudbeds", Paths: []string{"~/projects/cloudbeds/tools"}},
+			{Label: "OSS", Paths: []string{"~/projects/oss/devtools", "~/projects/oss/ai-agents"}},
+		},
+		ActiveWorkspace: "OSS",
+	}
+	if err := SaveState(path, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.IncludeWorktrees || out.ActiveWorkspace != "OSS" || len(out.Workspaces) != 2 {
+		t.Fatalf("round-trip mismatch: %+v", out)
+	}
+	if len(out.Workspaces[1].Paths) != 2 {
+		t.Errorf("expected 2 paths in OSS workspace, got %v", out.Workspaces[1].Paths)
+	}
+	if ws, ok := out.FindWorkspace("Cloudbeds"); !ok || ws.Paths[0] != "~/projects/cloudbeds/tools" {
+		t.Errorf("FindWorkspace failed: ok=%v ws=%+v", ok, ws)
+	}
+}
+
+func TestValidateWorkspace(t *testing.T) {
+	existing := []Workspace{{Label: "A", Paths: []string{"/a"}}}
+	cases := []struct {
+		name    string
+		ws      Workspace
+		editIdx int
+		wantErr bool
+	}{
+		{"valid new", Workspace{Label: "B", Paths: []string{"/b"}}, -1, false},
+		{"valid edit-in-place keeps label", Workspace{Label: "A", Paths: []string{"/a2"}}, 0, false},
+		{"empty label", Workspace{Label: "", Paths: []string{"/x"}}, -1, true},
+		{"no paths", Workspace{Label: "X", Paths: nil}, -1, true},
+		{"empty path", Workspace{Label: "X", Paths: []string{"  "}}, -1, true},
+		{"duplicate label", Workspace{Label: "A", Paths: []string{"/x"}}, -1, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateWorkspace(tc.ws, existing, tc.editIdx)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("got %v, wantErr=%v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestCacheFreshnessDuration(t *testing.T) {
 	cases := []struct {
 		name, in string

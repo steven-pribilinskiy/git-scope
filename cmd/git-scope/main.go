@@ -164,11 +164,20 @@ func run(cmd string, dirs []string, opts options) error {
 	//   1. Config file (`includeWorktrees: ...`)
 	//   2. State file (`~/.config/git-scope/state.json`) — runtime W toggle
 	//   3. CLI flag (`--worktrees`)
-	if state, err := config.LoadState(config.DefaultStatePath()); err == nil {
-		cfg.IncludeWorktrees = state.IncludeWorktrees
-	}
+	state, _ := config.LoadState(config.DefaultStatePath())
+	cfg.IncludeWorktrees = state.IncludeWorktrees
 	if opts.WorktreesSet {
 		cfg.IncludeWorktrees = opts.IncludeWorktrees
+	}
+
+	// Apply the last-active saved workspace, if any. The workspace's paths
+	// override cfg.Roots so the dashboard boots into the same view the user
+	// last switched to. An explicit CLI dir argument (handled above) still
+	// wins — that's the "git-scope /some/path" override.
+	if len(dirs) == 0 && state.ActiveWorkspace != "" {
+		if ws, ok := state.FindWorkspace(state.ActiveWorkspace); ok {
+			cfg.Roots = expandDirs(ws.Paths)
+		}
 	}
 
 	switch cmd {
